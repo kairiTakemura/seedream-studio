@@ -27,7 +27,8 @@ export default function Home() {
         return data.imageUrl;
       }
       if (data.status === "failed" || data.status === "canceled") {
-        throw new Error(data.error || "画像生成に失敗しました");
+        const debugInfo = data.debug ? `\n[Debug] ${JSON.stringify(data.debug)}` : "";
+        throw new Error((data.error || "画像生成に失敗しました") + debugInfo);
       }
       // "starting" or "processing" → keep polling
     }
