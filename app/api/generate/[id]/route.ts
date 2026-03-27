@@ -22,25 +22,29 @@ export async function GET(
       { headers: { Authorization: `Bearer ${apiKey}` } }
     );
 
-    // Stream the response as text to avoid parsing the full 3MB JSON
     const text = await res.text();
-
-    // Quick check for status without full JSON parse
     const statusMatch = text.match(/"status"\s*:\s*"([^"]+)"/);
     const status = statusMatch ? statusMatch[1] : "UNKNOWN";
 
     if (status === "COMPLETED") {
-      // Extract image_url using regex — much faster than JSON.parse on 3MB
       const urlMatch = text.match(/"image_url"\s*:\s*"([^"]+)"/);
-
       if (urlMatch && urlMatch[1]) {
         return NextResponse.json({ status: "succeeded", imageUrl: urlMatch[1] });
       }
 
-      // Fallback: try to find a short image reference
+      try {
+        const data = JSON.parse(text);
+        const output = data?.output;
+        if (output?.images && Array.isArray(output.images) && output.images.length > 0) {
+          const img = output.images[0];
+          const imageUrl = img.startsWith("data:") ? img : `data:image/png;base64,${img}`;
+          return NextResponse.json({ status: "succeeded", imageUrl });
+        }
+      } catch {}
+
       return NextResponse.json({
         status: "failed",
-        error: "image_url が見つかりませんでした。",
+        error: "画像の取得に失敗しました。",
       });
     }
 
@@ -52,7 +56,6 @@ export async function GET(
       });
     }
 
-    // IN_QUEUE or IN_PROGRESS
     return NextResponse.json({ status });
   } catch (err: unknown) {
     console.error("[poll] Exception:", err);
