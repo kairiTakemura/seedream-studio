@@ -22,41 +22,62 @@ export async function GET(
       { headers: { Authorization: `Bearer ${apiKey}` } }
     );
 
-    const text = await res.text();
-    const statusMatch = text.match(/"status"\s*:\s*"([^"]+)"/);
-    const status = statusMatch ? statusMatch[1] : "UNKNOWN";
+    if (!res.body) {
+      return NextResponse.json({ error: "No response body" }, { status: 500 });
+    }
 
-    if (status === "COMPLETED") {
-      const urlMatch = text.match(/"image_url"\s*:\s*"([^"]+)"/);
+    // Stream response - read only first ~50KB to find status and image_url
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let accumulated = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      accumulated += decoder.decode(value, { stream: true });
+
+      // Check status
+      const statusMatch = accumulated.match(/"status"\s*:\s*"([^"]+)"/);
+      if (!statusMatch) continue;
+
+      const status = statusMatch[1];
+
+      if (status !== "COMPLETED") {
+        reader.cancel();
+        if (status === "FAILED") {
+          const errorMatch = accumulated.match(/"error"\s*:\s*"([^"]+)"/);
+          return NextResponse.json({
+            status: "failed",
+            error: errorMatch ? errorMatch[1] : "画像生成に失敗しました。",
+          });
+        }
+        return NextResponse.json({ status });
+      }
+
+      // COMPLETED - look for image_url
+      const urlMatch = accumulated.match(/"image_url"\s*:\s*"([^"]+)"/);
       if (urlMatch && urlMatch[1]) {
+        reader.cancel();
         return NextResponse.json({ status: "succeeded", imageUrl: urlMatch[1] });
       }
 
-      try {
-        const data = JSON.parse(text);
-        const output = data?.output;
-        if (output?.images && Array.isArray(output.images) && output.images.length > 0) {
-          const img = output.images[0];
-          const imageUrl = img.startsWith("data:") ? img : `data:image/png;base64,${img}`;
-          return NextResponse.json({ status: "succeeded", imageUrl });
-        }
-      } catch {}
+      // Stop reading after 50KB to avoid timeout
+      if (accumulated.length > 50000) {
+        reader.cancel();
+        break;
+      }
+    }
 
+    // If we got here with COMPLETED but no image_url, try images array
+    const imgMatch = accumulated.match(/"images"\s*:\s*\["([^"]{0,200})/);
+    if (imgMatch) {
       return NextResponse.json({
         status: "failed",
-        error: "画像の取得に失敗しました。",
+        error: "画像はbase64形式で返されましたが、サイズが大きすぎます。",
       });
     }
 
-    if (status === "FAILED") {
-      const errorMatch = text.match(/"error"\s*:\s*"([^"]+)"/);
-      return NextResponse.json({
-        status: "failed",
-        error: errorMatch ? errorMatch[1] : "画像生成に失敗しました。",
-      });
-    }
-
-    return NextResponse.json({ status });
+    return NextResponse.json({ status: "failed", error: "画像の取得に失敗しました。" });
   } catch (err: unknown) {
     console.error("[poll] Exception:", err);
     const message =
