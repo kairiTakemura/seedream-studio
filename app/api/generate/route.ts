@@ -53,10 +53,6 @@ export async function POST(request: NextRequest) {
       aspect_ratio: ASPECT_RATIO_MAP[aspectRatio] || "1:1",
     };
 
-    if (imageDataUris.length > 0) {
-      input.image = imageDataUris[0];
-    }
-
     // Create prediction WITHOUT waiting — returns immediately
     const prediction = await replicate.predictions.create({
       model: "bytedance/seedream-4.5",
