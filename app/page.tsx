@@ -9,7 +9,16 @@ import AspectRatioSelector from "./components/AspectRatioSelector";
 import GeneratedImage from "./components/GeneratedImage";
 import GeneratingLoader from "./components/GeneratingLoader";
 
-const MODEL_GROUPS = [
+type ModelValue =
+  | "seedream-4.5"
+  | "seedream-4.5-pro"
+  | "seedream-4.5-turbo"
+  | "flux1-dev-nsfw";
+
+const MODEL_GROUPS: Array<{
+  group: string;
+  models: Array<{ value: ModelValue; label: string; description: string }>;
+}> = [
   {
     group: "Seedream",
     models: [
@@ -24,9 +33,7 @@ const MODEL_GROUPS = [
       { value: "flux1-dev-nsfw", label: "FLUX.1-dev (NSFW)", description: "高品質・無制限" },
     ],
   },
-] as const;
-
-type ModelValue = typeof MODEL_GROUPS[number]["models"][number]["value"];
+];
 
 const ALL_MODELS = MODEL_GROUPS.flatMap((g) => g.models);
 
