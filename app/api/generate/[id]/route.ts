@@ -2,13 +2,25 @@ export const runtime = "edge";
 
 import { NextRequest, NextResponse } from "next/server";
 
+// モデル → エンドポイント環境変数名（generate/route.ts と同期）
+const MODEL_ENDPOINT_MAP: Record<string, string> = {
+  "seedream-4.5":       "RUNPOD_ENDPOINT_ID",
+  "seedream-4.5-pro":   "RUNPOD_ENDPOINT_ID_PRO",
+  "seedream-4.5-turbo": "RUNPOD_ENDPOINT_ID_TURBO",
+  "flux1-dev-nsfw":     "RUNPOD_ENDPOINT_ID_FLUX_NSFW",
+};
+
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
     const apiKey = process.env.RUNPOD_API_KEY;
-    const endpointId = process.env.RUNPOD_ENDPOINT_ID;
+
+    // モデル名をクエリパラメータから取得（省略時はデフォルト）
+    const model = request.nextUrl.searchParams.get("model") ?? "seedream-4.5";
+    const endpointEnvKey = MODEL_ENDPOINT_MAP[model] ?? "RUNPOD_ENDPOINT_ID";
+    const endpointId = process.env[endpointEnvKey] || process.env.RUNPOD_ENDPOINT_ID;
 
     if (!apiKey || !endpointId) {
       return NextResponse.json(
@@ -29,17 +41,31 @@ export async function GET(
 
     if (data.status === "COMPLETED") {
       const output = data.output;
-      let imageUrl = null;
+      let imageUrl: string | null = null;
 
+      // Seedream / シンプルworker形式
       if (output?.image_url) {
         imageUrl = output.image_url;
-      } else if (output?.images?.length > 0) {
+      }
+      // ComfyUI worker-comfyui v5+ 形式: { images: [{ filename, type, data }] }
+      else if (Array.isArray(output?.images) && output.images.length > 0) {
         const img = output.images[0];
-        imageUrl = img.startsWith("data:") ? img : `data:image/png;base64,${img}`;
+        if (typeof img === "string") {
+          imageUrl = img.startsWith("data:") ? img : `data:image/png;base64,${img}`;
+        } else if (img?.data) {
+          imageUrl = img.data.startsWith("data:")
+            ? img.data
+            : `data:image/png;base64,${img.data}`;
+        }
+      }
+      // 旧形式 (v4以前): output.message に base64
+      else if (output?.message) {
+        const msg = output.message as string;
+        imageUrl = msg.startsWith("data:") ? msg : `data:image/png;base64,${msg}`;
       }
 
       if (!imageUrl) {
-        return NextResponse.json({ status: "failed", error: "No image found." });
+        return NextResponse.json({ status: "failed", error: "No image found in output." });
       }
 
       return NextResponse.json({ status: "succeeded", imageUrl });
@@ -58,3 +84,4 @@ export async function GET(
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
