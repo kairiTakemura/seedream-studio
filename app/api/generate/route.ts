@@ -1,33 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
-import Replicate from "replicate";
 
-// Vercel Hobby plan: 10s max — this endpoint just kicks off the prediction
 export const maxDuration = 10;
 
-const ASPECT_RATIO_MAP: Record<string, string> = {
-  "1:1": "1:1",
-  "16:9": "16:9",
-  "9:16": "9:16",
-  "4:3": "4:3",
-  "3:4": "3:4",
+// Aspect ratio → pixel dimensions (SDXL optimized resolutions)
+const ASPECT_RATIO_SIZES: Record<string, { width: number; height: number }> = {
+  "1:1": { width: 1024, height: 1024 },
+  "16:9": { width: 1344, height: 768 },
+  "9:16": { width: 768, height: 1344 },
+  "4:3": { width: 1152, height: 896 },
+  "3:4": { width: 896, height: 1152 },
 };
 
 export async function POST(request: NextRequest) {
   try {
-    const token = process.env.REPLICATE_API_TOKEN;
-    if (!token) {
+    const apiKey = process.env.RUNPOD_API_KEY;
+    const endpointId = process.env.RUNPOD_ENDPOINT_ID;
+
+    if (!apiKey || !endpointId) {
       return NextResponse.json(
-        { error: "REPLICATE_API_TOKEN が設定されていません。" },
+        { error: "RUNPOD_API_KEY または RUNPOD_ENDPOINT_ID が設定されていません。" },
         { status: 500 }
       );
     }
 
-    const replicate = new Replicate({ auth: token });
-
     const formData = await request.formData();
     const prompt = formData.get("prompt") as string;
     const aspectRatio = formData.get("aspectRatio") as string;
-    const referenceImages = formData.getAll("referenceImages") as File[];
 
     if (!prompt || prompt.trim().length === 0) {
       return NextResponse.json(
@@ -36,30 +34,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Convert reference images to data URIs
-    const imageDataUris: string[] = [];
-    for (const file of referenceImages) {
-      if (file.size > 0) {
-        const bytes = await file.arrayBuffer();
-        const buffer = Buffer.from(bytes);
-        const base64 = buffer.toString("base64");
-        const mimeType = file.type || "image/png";
-        imageDataUris.push(`data:${mimeType};base64,${base64}`);
-      }
-    }
+    const size = ASPECT_RATIO_SIZES[aspectRatio] || ASPECT_RATIO_SIZES["1:1"];
 
-    const input: Record<string, unknown> = {
-      prompt: prompt.trim(),
-      aspect_ratio: ASPECT_RATIO_MAP[aspectRatio] || "1:1",
-    };
-
-    // Create prediction WITHOUT waiting — returns immediately
-    const prediction = await replicate.predictions.create({
-      model: "bytedance/seedream-4.5",
-      input,
+    // RunPod Serverless API — kick off a job
+    const res = await fetch(`https://api.runpod.ai/v2/${endpointId}/run`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        input: {
+          prompt: prompt.trim(),
+          width: size.width,
+          height: size.height,
+          num_inference_steps: 30,
+          guidance_scale: 7.5,
+        },
+      }),
     });
 
-    return NextResponse.json({ id: prediction.id, status: prediction.status });
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || `RunPod API error: ${res.status}`);
+    }
+
+    return NextResponse.json({ id: data.id, status: data.status });
   } catch (err: unknown) {
     console.error("Generation error:", err);
     const message =
