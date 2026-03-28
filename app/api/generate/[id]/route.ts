@@ -1,99 +1,87 @@
+export const runtime = "edge";
+
 import { NextRequest, NextResponse } from "next/server";
 
-export const maxDuration = 10;
+// モデル → エンドポイント環境変数名（generate/route.ts と同期）
+const MODEL_ENDPOINT_MAP: Record<string, string> = {
+  "seedream-4.5":       "RUNPOD_ENDPOINT_ID",
+  "seedream-4.5-pro":   "RUNPOD_ENDPOINT_ID_PRO",
+  "seedream-4.5-turbo": "RUNPOD_ENDPOINT_ID_TURBO",
+  "flux1-dev-nsfw":     "RUNPOD_ENDPOINT_ID_FLUX_NSFW",
+};
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
     const apiKey = process.env.RUNPOD_API_KEY;
-    const endpointId = process.env.RUNPOD_ENDPOINT_ID;
+
+    // モデル名をクエリパラメータから取得（省略時はデフォルト）
+    const model = request.nextUrl.searchParams.get("model") ?? "seedream-4.5";
+    const endpointEnvKey = MODEL_ENDPOINT_MAP[model] ?? "RUNPOD_ENDPOINT_ID";
+    const endpointId = process.env[endpointEnvKey] || process.env.RUNPOD_ENDPOINT_ID;
 
     if (!apiKey || !endpointId) {
       return NextResponse.json(
-        { error: "RUNPOD_API_KEY または RUNPOD_ENDPOINT_ID が設定されていません。" },
+        { error: "RUNPOD_API_KEY or RUNPOD_ENDPOINT_ID is not set." },
         { status: 500 }
       );
     }
 
-    const url = `https://api.runpod.ai/v2/${endpointId}/status/${params.id}`;
-    console.log("[poll] Fetching:", url);
-
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${apiKey}` },
-    });
+    const res = await fetch(
+      `https://api.runpod.ai/v2/${endpointId}/status/${params.id}`,
+      {
+        headers: { Authorization: `Bearer ${apiKey}` },
+        cache: "no-store",
+      }
+    );
 
     const data = await res.json();
-    console.log("[poll] RunPod status:", data.status);
-    console.log("[poll] RunPod output type:", typeof data.output);
-    console.log("[poll] RunPod output preview:", JSON.stringify(data.output)?.slice(0, 500));
 
     if (data.status === "COMPLETED") {
-      let imageUrl: string | null = null;
       const output = data.output;
+      let imageUrl: string | null = null;
 
-      // Try every known format from RunPod SDXL workers
-      if (Array.isArray(output) && output.length > 0) {
-        const first = output[0];
-        console.log("[poll] output[0] type:", typeof first);
-        console.log("[poll] output[0] keys:", first && typeof first === "object" ? Object.keys(first) : "N/A");
-
-        if (typeof first === "string") {
-          imageUrl = first.startsWith("data:") ? first : `data:image/png;base64,${first}`;
-        } else if (first?.image) {
-          const img = first.image;
-          imageUrl = img.startsWith("data:") ? img : `data:image/png;base64,${img}`;
-        } else if (first?.image_url) {
-          imageUrl = first.image_url;
-        }
-      } else if (output?.image) {
-        const img = output.image;
-        imageUrl = img.startsWith("data:") ? img : `data:image/png;base64,${img}`;
-      } else if (output?.images && Array.isArray(output.images)) {
+      // Seedream / シンプルworker形式
+      if (output?.image_url) {
+        imageUrl = output.image_url;
+      }
+      // ComfyUI worker-comfyui v5+ 形式: { images: [{ filename, type, data }] }
+      else if (Array.isArray(output?.images) && output.images.length > 0) {
         const img = output.images[0];
-        imageUrl = img.startsWith("data:") ? img : `data:image/png;base64,${img}`;
-      } else if (typeof output === "object" && output !== null) {
-        // Log all keys so we can see what format it uses
-        console.log("[poll] output keys:", Object.keys(output));
+        if (typeof img === "string") {
+          imageUrl = img.startsWith("data:") ? img : `data:image/png;base64,${img}`;
+        } else if (img?.data) {
+          imageUrl = img.data.startsWith("data:")
+            ? img.data
+            : `data:image/png;base64,${img.data}`;
+        }
+      }
+      // 旧形式 (v4以前): output.message に base64
+      else if (output?.message) {
+        const msg = output.message as string;
+        imageUrl = msg.startsWith("data:") ? msg : `data:image/png;base64,${msg}`;
       }
 
       if (!imageUrl) {
-        console.error("[poll] Could not extract image. Full output keys:",
-          output && typeof output === "object" ? Object.keys(output) : typeof output
-        );
-        return NextResponse.json({
-          status: "failed",
-          error: "画像の取得に失敗しました。出力形式が不明です。",
-          debug: {
-            outputType: typeof output,
-            isArray: Array.isArray(output),
-            keys: output && typeof output === "object" && !Array.isArray(output) ? Object.keys(output) : null,
-            firstItemKeys: Array.isArray(output) && output[0] && typeof output[0] === "object" ? Object.keys(output[0]) : null,
-            preview: JSON.stringify(output)?.slice(0, 300),
-          },
-        });
+        return NextResponse.json({ status: "failed", error: "No image found in output." });
       }
 
-      console.log("[poll] Image URL length:", imageUrl.length);
       return NextResponse.json({ status: "succeeded", imageUrl });
     }
 
     if (data.status === "FAILED") {
-      console.error("[poll] Job failed:", data.error);
       return NextResponse.json({
         status: "failed",
-        error: data.error || "画像生成に失敗しました。",
+        error: data.error || "Image generation failed.",
       });
     }
 
-    // IN_QUEUE or IN_PROGRESS
-    console.log("[poll] Still processing:", data.status);
     return NextResponse.json({ status: data.status });
-  } catch (err: unknown) {
-    console.error("[poll] Exception:", err);
-    const message =
-      err instanceof Error ? err.message : "ステータス確認に失敗しました。";
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Status check failed.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+

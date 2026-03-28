@@ -2,25 +2,54 @@
 
 import { useState, useCallback } from "react";
 import { toast } from "sonner";
-import { Sparkles, Wand2 } from "lucide-react";
+import { Sparkles, Wand2, ChevronDown } from "lucide-react";
 
 import ImageUploader from "./components/ImageUploader";
 import AspectRatioSelector from "./components/AspectRatioSelector";
 import GeneratedImage from "./components/GeneratedImage";
 import GeneratingLoader from "./components/GeneratingLoader";
 
+type ModelValue =
+  | "seedream-4.5"
+  | "seedream-4.5-pro"
+  | "seedream-4.5-turbo"
+  | "flux1-dev-nsfw";
+
+const MODEL_GROUPS: Array<{
+  group: string;
+  models: Array<{ value: ModelValue; label: string; description: string }>;
+}> = [
+  {
+    group: "Seedream",
+    models: [
+      { value: "seedream-4.5",       label: "Seedream 4.5",        description: "標準モデル（高速）" },
+      { value: "seedream-4.5-pro",   label: "Seedream 4.5 Pro",    description: "高品質・高精度" },
+      { value: "seedream-4.5-turbo", label: "Seedream 4.5 Turbo",  description: "超高速生成" },
+    ],
+  },
+  {
+    group: "NSFW",
+    models: [
+      { value: "flux1-dev-nsfw", label: "FLUX.1-dev (NSFW)", description: "高品質・無制限" },
+    ],
+  },
+];
+
+const ALL_MODELS = MODEL_GROUPS.flatMap((g) => g.models);
+
 export default function Home() {
   const [prompt, setPrompt] = useState("");
   const [referenceFiles, setReferenceFiles] = useState<File[]>([]);
   const [aspectRatio, setAspectRatio] = useState("1:1");
+  const [selectedModel, setSelectedModel] = useState<ModelValue>("seedream-4.5");
   const [isGenerating, setIsGenerating] = useState(false);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
 
-  const poll = useCallback(async (id: string): Promise<string> => {
+  const poll = useCallback(async (id: string, model: string): Promise<string> => {
     const maxAttempts = 120; // ~4 minutes with 2s interval
     for (let i = 0; i < maxAttempts; i++) {
       await new Promise((r) => setTimeout(r, 2000));
-      const res = await fetch(`/api/generate/${id}`);
+      const res = await fetch(`/api/generate/${id}?model=${encodeURIComponent(model)}`);
       const data = await res.json();
 
       if (data.status === "succeeded" && data.imageUrl) {
@@ -48,6 +77,7 @@ export default function Home() {
       const formData = new FormData();
       formData.append("prompt", prompt.trim());
       formData.append("aspectRatio", aspectRatio);
+      formData.append("model", selectedModel);
 
       for (const file of referenceFiles) {
         formData.append("referenceImages", file);
@@ -66,7 +96,7 @@ export default function Home() {
       }
 
       // Step 2: Poll until complete
-      const imageUrl = await poll(data.id);
+      const imageUrl = await poll(data.id, selectedModel);
       setResultUrl(imageUrl);
       toast.success("画像が生成されました！");
     } catch (err: unknown) {
@@ -76,7 +106,7 @@ export default function Home() {
     } finally {
       setIsGenerating(false);
     }
-  }, [prompt, aspectRatio, referenceFiles, poll]);
+  }, [prompt, aspectRatio, selectedModel, referenceFiles, poll]);
 
   return (
     <div className="min-h-screen">
@@ -92,7 +122,7 @@ export default function Home() {
                 Seedream Studio
               </h1>
               <p className="hidden text-[11px] text-surface-400 sm:block">
-                Powered by Seedream 4.5
+                Powered by {ALL_MODELS.find(m => m.value === selectedModel)?.label ?? "Seedream 4.5"}
               </p>
             </div>
           </div>
@@ -133,6 +163,31 @@ export default function Home() {
 
             {/* Reference Images */}
             <ImageUploader files={referenceFiles} onChange={setReferenceFiles} />
+
+            {/* Model Selector */}
+            <div className="space-y-3">
+              <label className="block text-sm font-semibold text-surface-700">
+                モデル
+              </label>
+              <div className="relative">
+                <select
+                  value={selectedModel}
+                  onChange={(e) => setSelectedModel(e.target.value as ModelValue)}
+                  className="input-base w-full appearance-none pr-10 cursor-pointer"
+                >
+                  {MODEL_GROUPS.map((group) => (
+                    <optgroup key={group.group} label={group.group}>
+                      {group.models.map((model) => (
+                        <option key={model.value} value={model.value}>
+                          {model.label} — {model.description}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-surface-400" />
+              </div>
+            </div>
 
             {/* Aspect Ratio */}
             <AspectRatioSelector
@@ -212,7 +267,7 @@ export default function Home() {
       <footer className="border-t border-surface-200 bg-white/50 py-6">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <p className="text-center text-xs text-surface-400">
-            Seedream Studio · Built with Next.js &amp; Replicate · Seedream 4.5
+            Seedream Studio · Built with Next.js &amp; Replicate · {ALL_MODELS.find(m => m.value === selectedModel)?.label ?? "Seedream 4.5"}{" "}
             by ByteDance
           </p>
         </div>
