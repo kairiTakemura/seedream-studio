@@ -95,8 +95,12 @@ export default function Home() {
         throw new Error(data.error || "画像生成の開始に失敗しました");
       }
 
-      // Step 2: Poll until complete
-      const imageUrl = await poll(data.id, selectedModel);
+      // Step 2: BytePlus は同期レスポンスで imageUrl が直接返るためポーリング不要
+      // RunPod (FLUX NSFW) は従来通りポーリング
+      const imageUrl =
+        data.status === "COMPLETED" && data.imageUrl
+          ? data.imageUrl
+          : await poll(data.id, selectedModel);
       setResultUrl(imageUrl);
       toast.success("画像が生成されました！");
     } catch (err: unknown) {
