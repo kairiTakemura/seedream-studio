@@ -2,27 +2,30 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const maxDuration = 10;
 
-// ── BytePlus ModelArk エンドポイント ──────────────────────────────
 const BYTEPLUS_API_URL =
   "https://ark.ap-southeast.bytepluses.com/api/v3/images/generations";
 
-// Aspect ratio → サイズ文字列（BytePlus形式）
-const ASPECT_RATIO_SIZES: Record<string, string> = {
-  "1:1":  "1024x1024",
-  "16:9": "1344x768",
-  "9:16": "768x1344",
-  "4:3":  "1152x896",
-  "3:4":  "896x1152",
+const ASPECT_RATIO_MAP: Record<string, string> = {
+  "1:1":  "1:1",
+  "16:9": "16:9",
+  "9:16": "9:16",
+  "4:3":  "4:3",
+  "3:4":  "3:4",
 };
 
-// Seedream モデル名（BytePlus 公式モデル識別子）
 const SEEDREAM_MODEL_MAP: Record<string, string> = {
   "seedream-4.5":       "seedream-4-5-251128",
   "seedream-4.5-pro":   "seedream-4-5-251128",
   "seedream-4.5-turbo": "seedream-4-5-251128",
 };
 
-// ComfyUI形式のワークフローJSONを生成（FLUX NSFW 用）
+// File → base64 data URL
+async function fileToBase64(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  const base64 = Buffer.from(buffer).toString("base64");
+  return `data:${file.type};base64,${base64}`;
+}
+
 function buildFluxComfyWorkflow(
   prompt: string,
   width: number,
@@ -52,6 +55,7 @@ export async function POST(request: NextRequest) {
     const prompt      = formData.get("prompt") as string;
     const aspectRatio = formData.get("aspectRatio") as string;
     const model       = (formData.get("model") as string) || "seedream-4.5";
+    const refImages   = formData.getAll("referenceImages") as File[];
 
     if (!prompt || prompt.trim().length === 0) {
       return NextResponse.json(
@@ -60,24 +64,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ── FLUX NSFW → 既存の RunPod ロジック ──────────────────────
+    // ── FLUX NSFW → RunPod ──────────────────────────────────────
     if (model === "flux1-dev-nsfw") {
       const runpodApiKey = process.env.RUNPOD_API_KEY;
       const endpointId   = process.env.RUNPOD_ENDPOINT_ID_FLUX_NSFW;
-
       if (!runpodApiKey || !endpointId) {
         return NextResponse.json(
           { error: "RUNPOD_API_KEY または RUNPOD_ENDPOINT_ID_FLUX_NSFW が設定されていません。" },
           { status: 500 }
         );
       }
-
       const wh = aspectRatio === "16:9"  ? { width: 1344, height: 768  }
                : aspectRatio === "9:16"  ? { width: 768,  height: 1344 }
                : aspectRatio === "4:3"   ? { width: 1152, height: 896  }
                : aspectRatio === "3:4"   ? { width: 896,  height: 1152 }
                :                           { width: 1024, height: 1024 };
-
       const res = await fetch(`https://api.runpod.ai/v2/${endpointId}/run`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${runpodApiKey}` },
@@ -90,17 +91,37 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ id: data.id, status: data.status, backend: "runpod" });
     }
 
-    // ── Seedream 4.5 系 → BytePlus 公式 API ───────────────────────
+    // ── Seedream 4.5 → BytePlus ──────────────────────────────────
     const byteplusApiKey = process.env.BYTEPLUS_API_KEY;
     if (!byteplusApiKey) {
       return NextResponse.json(
-        { error: "BYTEPLUS_API_KEY が設定されていません。Vercel の環境変数に追加してください。" },
+        { error: "BYTEPLUS_API_KEY が設定されていません。" },
         { status: 500 }
       );
     }
 
-    const byteplusModel = SEEDREAM_MODEL_MAP[model] ?? "seedream-4-5-251128";
-    const size          = ASPECT_RATIO_SIZES[aspectRatio] ?? "1024x1024";
+    const byteplusModel    = SEEDREAM_MODEL_MAP[model] ?? "seedream-4-5-251128";
+    const aspectRatioParam = ASPECT_RATIO_MAP[aspectRatio] ?? "1:1";
+
+    // 参照画像を base64 に変換（最大10枚）
+    const imageBase64List = await Promise.all(
+      refImages.slice(0, 10).map((f) => fileToBase64(f))
+    );
+
+    const requestBody: Record<string, unknown> = {
+      model:           byteplusModel,
+      prompt:          prompt.trim(),
+      size:            "2K",
+      aspect_ratio:    aspectRatioParam,
+      n:               1,
+      response_format: "url",
+      watermark:       false,
+    };
+
+    // 参照画像がある場合のみ image フィールドを追加
+    if (imageBase64List.length > 0) {
+      requestBody.image = imageBase64List.map((url) => ({ type: "image_url", image_url: { url } }));
+    }
 
     const res = await fetch(BYTEPLUS_API_URL, {
       method: "POST",
@@ -108,33 +129,24 @@ export async function POST(request: NextRequest) {
         "Content-Type": "application/json",
         Authorization: `Bearer ${byteplusApiKey}`,
       },
-      body: JSON.stringify({
-        model:           byteplusModel,
-        prompt:          prompt.trim(),
-        size,
-        n:               1,
-        response_format: "url",
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     const data = await res.json();
-
     if (!res.ok) {
       throw new Error(data.error?.message || `BytePlus API error: ${res.status}`);
     }
 
-    // BytePlus は同期レスポンス: { data: [{ url: "..." }] }
     const imageUrl = data?.data?.[0]?.url ?? null;
     if (!imageUrl) {
       throw new Error("BytePlus からの画像URLが取得できませんでした。");
     }
 
-    // 既存のポーリングフローをバイパスして直接 imageUrl を返す
     return NextResponse.json({
-      id:       "byteplus-sync",
-      status:   "COMPLETED",
+      id:      "byteplus-sync",
+      status:  "COMPLETED",
       imageUrl,
-      backend:  "byteplus",
+      backend: "byteplus",
     });
 
   } catch (err: unknown) {
