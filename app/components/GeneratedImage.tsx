@@ -9,18 +9,17 @@ interface GeneratedImageProps {
 }
 
 export async function downloadImage(url: string, filename?: string) {
+  const name = filename || `seedream-${Date.now()}.jpg`;
   try {
-    const response = await fetch(url);
-    const blob = await response.blob();
-    const ext = blob.type.includes("png") ? "png" : "jpg";
-    const blobUrl = URL.createObjectURL(blob);
+    // aタグにdownload属性をつけて直接リンクを開く方式（CORS回避）
     const a = document.createElement("a");
-    a.href = blobUrl;
-    a.download = filename || `seedream-${Date.now()}.${ext}`;
+    a.href = url;
+    a.download = name;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(blobUrl);
   } catch {
     window.open(url, "_blank");
   }

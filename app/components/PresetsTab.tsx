@@ -1,17 +1,17 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Pencil, Trash2, Globe, Lock, ImageIcon } from "lucide-react";
+import { Pencil, Trash2, Globe, Lock, ImageIcon, Download } from "lucide-react";
 import { fetchPresets, deletePreset, updatePreset } from "@/lib/presets";
 import { type Preset } from "@/lib/supabase";
 import { toast } from "sonner";
 
 interface PresetsTabProps {
-  onSelectForBatch?: (preset: Preset) => void;
+  onLoadPreset?: (preset: Preset) => void;
   refreshKey?: number;
 }
 
-export default function PresetsTab({ onSelectForBatch, refreshKey }: PresetsTabProps) {
+export default function PresetsTab({ onLoadPreset, refreshKey }: PresetsTabProps) {
   const [tab, setTab] = useState<"mine" | "public">("mine");
   const [presets, setPresets] = useState<Preset[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,7 +57,6 @@ export default function PresetsTab({ onSelectForBatch, refreshKey }: PresetsTabP
 
   return (
     <div className="space-y-4">
-      {/* サブタブ */}
       <div className="flex items-center justify-between">
         <div className="flex rounded-xl bg-surface-100 p-1">
           {(["mine", "public"] as const).map((t) => (
@@ -74,7 +73,6 @@ export default function PresetsTab({ onSelectForBatch, refreshKey }: PresetsTabP
         </div>
       </div>
 
-      {/* コンテンツ */}
       {loading ? (
         <div className="flex items-center justify-center py-16 text-surface-400 text-sm">読み込み中...</div>
       ) : presets.length === 0 ? (
@@ -93,11 +91,7 @@ export default function PresetsTab({ onSelectForBatch, refreshKey }: PresetsTabP
               {/* サムネイル */}
               <div className="relative h-24 bg-surface-100">
                 {preset.images?.[0]?.url ? (
-                  <img
-                    src={preset.images[0].url}
-                    alt={preset.name}
-                    className="h-full w-full object-cover"
-                  />
+                  <img src={preset.images[0].url} alt={preset.name} className="h-full w-full object-cover" />
                 ) : (
                   <div className="flex h-full items-center justify-center">
                     <ImageIcon className="h-6 w-6 text-surface-300" />
@@ -105,9 +99,7 @@ export default function PresetsTab({ onSelectForBatch, refreshKey }: PresetsTabP
                 )}
                 <div className="absolute top-2 right-2">
                   <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                    preset.is_public
-                      ? "bg-green-100 text-green-700"
-                      : "bg-surface-200 text-surface-500"
+                    preset.is_public ? "bg-green-100 text-green-700" : "bg-surface-200 text-surface-500"
                   }`}>
                     {preset.is_public ? <Globe className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
                     {preset.is_public ? "公開" : "非公開"}
@@ -122,6 +114,7 @@ export default function PresetsTab({ onSelectForBatch, refreshKey }: PresetsTabP
                       className="input-base w-full text-sm"
                       value={editName}
                       onChange={(e) => setEditName(e.target.value)}
+                      placeholder="プリセット名"
                     />
                     <label className="flex items-center gap-2 text-xs text-surface-600">
                       <input
@@ -140,17 +133,22 @@ export default function PresetsTab({ onSelectForBatch, refreshKey }: PresetsTabP
                 ) : (
                   <>
                     <p className="font-semibold text-sm text-surface-800 truncate">{preset.name}</p>
-                    <p className="mt-0.5 text-xs text-surface-400 truncate">{preset.prompt}</p>
+                    <p className="mt-0.5 text-xs text-surface-500 line-clamp-2">{preset.prompt}</p>
                     <p className="mt-0.5 text-[10px] text-surface-300">
                       {preset.aspect_ratio} · 参照{preset.images?.length ?? 0}枚 · {preset.use_count}回使用
                     </p>
-                    <div className="mt-2 flex gap-2">
-                      {onSelectForBatch && (
+                    <div className="mt-2 flex gap-1.5">
+                      {/* 通常生成にロード */}
+                      {onLoadPreset && (
                         <button
-                          onClick={() => onSelectForBatch(preset)}
-                          className="btn-primary flex-1 !py-1.5 text-xs"
+                          onClick={() => {
+                            onLoadPreset(preset);
+                            toast.success(`「${preset.name}」を通常生成にロードしました`);
+                          }}
+                          className="btn-primary flex-1 !py-1.5 text-xs gap-1"
                         >
-                          選択
+                          <Download className="h-3 w-3 rotate-180" />
+                          編集
                         </button>
                       )}
                       {tab === "mine" && (
@@ -158,12 +156,14 @@ export default function PresetsTab({ onSelectForBatch, refreshKey }: PresetsTabP
                           <button
                             onClick={() => { setEditingId(preset.id); setEditName(preset.name); setEditIsPublic(preset.is_public); }}
                             className="btn-secondary !p-1.5"
+                            title="名前・公開設定を変更"
                           >
                             <Pencil className="h-3.5 w-3.5" />
                           </button>
                           <button
                             onClick={() => handleDelete(preset.id, preset.name)}
                             className="btn-secondary !p-1.5 text-red-400 hover:text-red-600"
+                            title="削除"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>

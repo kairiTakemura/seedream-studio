@@ -99,7 +99,7 @@ export default function BatchTab({ presets }: BatchTabProps) {
             <label className="mb-2 block text-sm font-semibold text-surface-700">ベース画像</label>
             {basePreview ? (
               <div className="relative w-full overflow-hidden rounded-xl border border-surface-200">
-                <img src={basePreview} alt="base" className="h-40 w-full object-cover" />
+                <img src={basePreview} alt="base" className="h-64 w-full object-cover" />
                 <button
                   onClick={() => { setBaseFile(null); setBasePreview(null); }}
                   className="absolute right-2 top-2 rounded-full bg-black/50 p-1 text-white hover:bg-black/70"
@@ -108,7 +108,7 @@ export default function BatchTab({ presets }: BatchTabProps) {
                 </button>
               </div>
             ) : (
-              <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-surface-200 bg-surface-50 py-8 hover:border-surface-300 hover:bg-surface-100 transition-colors">
+              <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-surface-200 bg-surface-50 py-16 hover:border-surface-300 hover:bg-surface-100 transition-colors">
                 <Upload className="h-6 w-6 text-surface-300" />
                 <span className="text-sm text-surface-500">クリックまたはドラッグ＆ドロップ</span>
                 <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleBaseFile(e.target.files[0])} />
