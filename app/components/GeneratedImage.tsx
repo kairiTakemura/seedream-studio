@@ -5,28 +5,29 @@ import { useState } from "react";
 
 interface GeneratedImageProps {
   url: string;
+  filename?: string;
 }
 
-export default function GeneratedImage({ url }: GeneratedImageProps) {
-  const [isFullscreen, setIsFullscreen] = useState(false);
+export async function downloadImage(url: string, filename?: string) {
+  try {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    const ext = blob.type.includes("png") ? "png" : "jpg";
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = filename || `seedream-${Date.now()}.${ext}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(blobUrl);
+  } catch {
+    window.open(url, "_blank");
+  }
+}
 
-  const handleDownload = async () => {
-    try {
-      const response = await fetch(url);
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = blobUrl;
-      a.download = `seedream-${Date.now()}.png`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(blobUrl);
-    } catch {
-      // Fallback: open in new tab
-      window.open(url, "_blank");
-    }
-  };
+export default function GeneratedImage({ url, filename }: GeneratedImageProps) {
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   return (
     <>
@@ -44,24 +45,19 @@ export default function GeneratedImage({ url }: GeneratedImageProps) {
             </button>
             <button
               type="button"
-              onClick={handleDownload}
+              onClick={() => downloadImage(url, filename)}
               className="btn-primary !px-4 !py-2 !text-xs"
             >
               <Download className="h-4 w-4" />
-              ダウンロード
+              保存
             </button>
           </div>
         </div>
         <div className="overflow-hidden rounded-2xl border border-surface-200 bg-surface-100 shadow-card">
-          <img
-            src={url}
-            alt="生成された画像"
-            className="h-auto w-full object-contain"
-          />
+          <img src={url} alt="生成された画像" className="h-auto w-full object-contain" />
         </div>
       </div>
 
-      {/* Fullscreen overlay */}
       {isFullscreen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in"
@@ -81,13 +77,10 @@ export default function GeneratedImage({ url }: GeneratedImageProps) {
           />
           <button
             className="absolute bottom-6 right-6 btn-primary"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleDownload();
-            }}
+            onClick={(e) => { e.stopPropagation(); downloadImage(url, filename); }}
           >
             <Download className="h-4 w-4" />
-            ダウンロード
+            保存
           </button>
         </div>
       )}

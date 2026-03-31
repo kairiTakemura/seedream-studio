@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { Upload, X, Wand2, ImageIcon } from "lucide-react";
+import { Upload, X, Wand2, ImageIcon, Download } from "lucide-react";
+import { downloadImage } from "./GeneratedImage";
 import { type Preset } from "@/lib/supabase";
 import { toast } from "sonner";
 
@@ -194,7 +195,22 @@ export default function BatchTab({ presets }: BatchTabProps) {
 
         {/* 右: 結果グリッド */}
         <div>
-          <label className="mb-2 block text-sm font-semibold text-surface-700">生成結果</label>
+          <div className="mb-2 flex items-center justify-between">
+            <label className="text-sm font-semibold text-surface-700">生成結果</label>
+            {results.some((r) => r.status === "done") && (
+              <button
+                onClick={() => {
+                  results
+                    .filter((r) => r.status === "done" && r.imageUrl)
+                    .forEach((r) => downloadImage(r.imageUrl!, `${r.presetName}-${Date.now()}.jpg`));
+                }}
+                className="btn-secondary !px-3 !py-1.5 !text-xs gap-1.5"
+              >
+                <Download className="h-3.5 w-3.5" />
+                すべて保存
+              </button>
+            )}
+          </div>
           {results.length === 0 ? (
             <div className="flex h-64 items-center justify-center rounded-2xl border-2 border-dashed border-surface-200 bg-surface-50">
               <p className="text-sm text-surface-400">プリセットを選択して生成してください</p>
@@ -226,14 +242,13 @@ export default function BatchTab({ presets }: BatchTabProps) {
                   <div className="px-2 py-1.5">
                     <p className="truncate text-xs font-medium text-surface-700">{result.presetName}</p>
                     {result.status === "done" && result.imageUrl && (
-                      <a
-                        href={result.imageUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[10px] text-accent hover:underline"
+                      <button
+                        onClick={() => downloadImage(result.imageUrl!, `${result.presetName}-${Date.now()}.jpg`)}
+                        className="flex items-center gap-1 text-[10px] text-accent hover:underline"
                       >
-                        開く
-                      </a>
+                        <Download className="h-3 w-3" />
+                        保存
+                      </button>
                     )}
                   </div>
                 </div>
