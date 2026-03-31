@@ -199,10 +199,12 @@ export default function BatchTab({ presets }: BatchTabProps) {
             <label className="text-sm font-semibold text-surface-700">生成結果</label>
             {results.some((r) => r.status === "done") && (
               <button
-                onClick={() => {
-                  results
-                    .filter((r) => r.status === "done" && r.imageUrl)
-                    .forEach((r) => downloadImage(r.imageUrl!, `${r.presetName}-${Date.now()}.jpg`));
+  onClick={async () => {
+                  const done = results.filter((r) => r.status === "done" && r.imageUrl);
+                  for (const r of done) {
+                    await downloadImage(r.imageUrl!, `${r.presetName}-${Date.now()}.jpg`);
+                    await new Promise((res) => setTimeout(res, 300));
+                  }
                 }}
                 className="btn-secondary !px-3 !py-1.5 !text-xs gap-1.5"
               >
