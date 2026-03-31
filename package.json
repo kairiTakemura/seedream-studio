@@ -15,7 +15,8 @@
     "sonner": "^1.7.0",
     "lucide-react": "^0.460.0",
     "clsx": "^2.1.1",
-    "tailwind-merge": "^2.6.0"
+    "tailwind-merge": "^2.6.0",
+    "@supabase/supabase-js": "^2.47.0"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",
