@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const byteplusModel = SEEDREAM_MODEL_MAP[model] ?? "seedream-4-5-251128";
+    const byteplusModel = process.env.BYTEPLUS_ENDPOINT_ID || SEEDREAM_MODEL_MAP[model] || "seedream-4-5-251128";
     // 公式SDK仕様: size は "WxH" ピクセル文字列を使う（aspect_ratio パラメータは存在しない）
     const size = ASPECT_RATIO_SIZES[aspectRatio] ?? "2048x2048";
 
