@@ -140,7 +140,7 @@ export async function POST(request: NextRequest) {
       throw new Error(errMsg);
     }
 
-    const imageUrl = data?.data?.[0]?.url ?? null;
+    const imageUrl = (data as { data?: { url?: string }[] })?.data?.[0]?.url ?? null;
     if (!imageUrl) {
       throw new Error("BytePlus からの画像URLが取得できませんでした。");
     }
