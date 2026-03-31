@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-export const maxDuration = 10;
+export const maxDuration = 60;
 
 const BYTEPLUS_API_URL =
   "https://ark.ap-southeast.bytepluses.com/api/v3/images/generations";
@@ -126,9 +126,18 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify(requestBody),
     });
 
-    const data = await res.json();
+    const rawText = await res.text();
+    let data: Record<string, unknown>;
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      throw new Error(`BytePlus API error ${res.status}: ${rawText.slice(0, 200)}`);
+    }
     if (!res.ok) {
-      throw new Error(data.error?.message || `BytePlus API error: ${res.status}`);
+      const errMsg = (data.error as { message?: string } | undefined)?.message
+        || JSON.stringify(data)
+        || `BytePlus API error: ${res.status}`;
+      throw new Error(errMsg);
     }
 
     const imageUrl = data?.data?.[0]?.url ?? null;
