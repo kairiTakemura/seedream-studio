@@ -17,9 +17,9 @@ const ASPECT_RATIO_SIZES: Record<string, string> = {
 
 // Seedream モデル名（BytePlus 公式モデル識別子）
 const SEEDREAM_MODEL_MAP: Record<string, string> = {
-  "seedream-4.5":       "doubao-seedream-4-5-251128",
-  "seedream-4.5-pro":   "doubao-seedream-4-5-251128",
-  "seedream-4.5-turbo": "doubao-seedream-4-5-251128",
+  "seedream-4.5":       "seedream-4-5-251128",
+  "seedream-4.5-pro":   "seedream-4-5-251128",
+  "seedream-4.5-turbo": "seedream-4-5-251128",
 };
 
 // ComfyUI形式のワークフローJSONを生成（FLUX NSFW 用）
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const byteplusModel = SEEDREAM_MODEL_MAP[model] ?? "doubao-seedream-4-5-251128";
+    const byteplusModel = SEEDREAM_MODEL_MAP[model] ?? "seedream-4-5-251128";
     const size          = ASPECT_RATIO_SIZES[aspectRatio] ?? "1024x1024";
 
     const res = await fetch(BYTEPLUS_API_URL, {
