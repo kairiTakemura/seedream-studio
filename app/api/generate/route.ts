@@ -5,12 +5,14 @@ export const maxDuration = 10;
 const BYTEPLUS_API_URL =
   "https://ark.ap-southeast.bytepluses.com/api/v3/images/generations";
 
-const ASPECT_RATIO_MAP: Record<string, string> = {
-  "1:1":  "1:1",
-  "16:9": "16:9",
-  "9:16": "9:16",
-  "4:3":  "4:3",
-  "3:4":  "3:4",
+// 公式SDKの型定義に基づくサイズ指定
+// size = "WxH" 形式（総ピクセル数 3.6M〜16.7M、アスペクト比 1/16〜16）
+const ASPECT_RATIO_SIZES: Record<string, string> = {
+  "1:1":  "2048x2048",  // 4,194,304px ✓
+  "16:9": "2560x1440",  // 3,686,400px ✓
+  "9:16": "1440x2560",  // 3,686,400px ✓
+  "4:3":  "2304x1728",  // 3,981,312px ✓
+  "3:4":  "1728x2304",  // 3,981,312px ✓
 };
 
 const SEEDREAM_MODEL_MAP: Record<string, string> = {
@@ -19,19 +21,15 @@ const SEEDREAM_MODEL_MAP: Record<string, string> = {
   "seedream-4.5-turbo": "seedream-4-5-251128",
 };
 
-// File → base64 data URL
-async function fileToBase64(file: File): Promise<string> {
+// File → base64 data URL（"data:image/jpeg;base64,xxxx" 形式）
+async function fileToBase64DataUrl(file: File): Promise<string> {
   const buffer = await file.arrayBuffer();
   const base64 = Buffer.from(buffer).toString("base64");
   return `data:${file.type};base64,${base64}`;
 }
 
 function buildFluxComfyWorkflow(
-  prompt: string,
-  width: number,
-  height: number,
-  steps: number,
-  _guidance: number
+  prompt: string, width: number, height: number, steps: number, _guidance: number
 ) {
   const seed = Math.floor(Math.random() * 1e15);
   return {
@@ -58,10 +56,7 @@ export async function POST(request: NextRequest) {
     const refImages   = formData.getAll("referenceImages") as File[];
 
     if (!prompt || prompt.trim().length === 0) {
-      return NextResponse.json(
-        { error: "プロンプトを入力してください。" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "プロンプトを入力してください。" }, { status: 400 });
     }
 
     // ── FLUX NSFW → RunPod ──────────────────────────────────────
@@ -74,17 +69,15 @@ export async function POST(request: NextRequest) {
           { status: 500 }
         );
       }
-      const wh = aspectRatio === "16:9"  ? { width: 1344, height: 768  }
-               : aspectRatio === "9:16"  ? { width: 768,  height: 1344 }
-               : aspectRatio === "4:3"   ? { width: 1152, height: 896  }
-               : aspectRatio === "3:4"   ? { width: 896,  height: 1152 }
-               :                           { width: 1024, height: 1024 };
+      const wh = aspectRatio === "16:9" ? { width: 1344, height: 768 }
+               : aspectRatio === "9:16" ? { width: 768,  height: 1344 }
+               : aspectRatio === "4:3"  ? { width: 1152, height: 896  }
+               : aspectRatio === "3:4"  ? { width: 896,  height: 1152 }
+               :                          { width: 1024, height: 1024 };
       const res = await fetch(`https://api.runpod.ai/v2/${endpointId}/run`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${runpodApiKey}` },
-        body: JSON.stringify({
-          input: { workflow: buildFluxComfyWorkflow(prompt.trim(), wh.width, wh.height, 28, 3.5) },
-        }),
+        body: JSON.stringify({ input: { workflow: buildFluxComfyWorkflow(prompt.trim(), wh.width, wh.height, 28, 3.5) } }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `RunPod API error: ${res.status}`);
@@ -95,32 +88,33 @@ export async function POST(request: NextRequest) {
     const byteplusApiKey = process.env.BYTEPLUS_API_KEY;
     if (!byteplusApiKey) {
       return NextResponse.json(
-        { error: "BYTEPLUS_API_KEY が設定されていません。" },
-        { status: 500 }
+        { error: "BYTEPLUS_API_KEY が設定されていません。" }, { status: 500 }
       );
     }
 
-    const byteplusModel    = SEEDREAM_MODEL_MAP[model] ?? "seedream-4-5-251128";
-    const aspectRatioParam = ASPECT_RATIO_MAP[aspectRatio] ?? "1:1";
+    const byteplusModel = SEEDREAM_MODEL_MAP[model] ?? "seedream-4-5-251128";
+    // 公式SDK仕様: size は "WxH" ピクセル文字列を使う（aspect_ratio パラメータは存在しない）
+    const size = ASPECT_RATIO_SIZES[aspectRatio] ?? "2048x2048";
 
-    // 参照画像を base64 に変換（最大10枚）
-    const imageBase64List = await Promise.all(
-      refImages.slice(0, 10).map((f) => fileToBase64(f))
+    // 参照画像を base64 data URL の配列に変換（最大10枚）
+    // 公式SDK仕様: image: string | list[string]
+    const imageList: string[] = await Promise.all(
+      refImages.slice(0, 10).map((f) => fileToBase64DataUrl(f))
     );
 
     const requestBody: Record<string, unknown> = {
       model:           byteplusModel,
       prompt:          prompt.trim(),
-      size:            "2K",
-      aspect_ratio:    aspectRatioParam,
-      n:               1,
+      size,
       response_format: "url",
       watermark:       false,
     };
 
-    // 参照画像がある場合のみ image フィールドを追加
-    if (imageBase64List.length > 0) {
-      requestBody.image = imageBase64List.map((url) => ({ type: "image_url", image_url: { url } }));
+    // 参照画像がある場合のみ追加（1枚ならstring、複数ならarray）
+    if (imageList.length === 1) {
+      requestBody.image = imageList[0];
+    } else if (imageList.length > 1) {
+      requestBody.image = imageList;
     }
 
     const res = await fetch(BYTEPLUS_API_URL, {
