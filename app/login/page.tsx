@@ -15,6 +15,10 @@ export default function LoginPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!email || !password) {
+      toast.error("メールアドレスとパスワードを入力してください");
+      return;
+    }
     setIsLoading(true);
     try {
       const { error } = await supabase.auth.signInWithPassword({
@@ -34,6 +38,10 @@ export default function LoginPage() {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!email || !password) {
+      toast.error("メールアドレスとパスワードを入力してください");
+      return;
+    }
     setIsLoading(true);
     try {
       const { error } = await supabase.auth.signUp({
