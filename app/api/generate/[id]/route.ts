@@ -1,6 +1,7 @@
 export const runtime = "edge";
 
 import { NextRequest, NextResponse } from "next/server";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 // モデル → エンドポイント環境変数名（generate/route.ts と同期）
 const MODEL_ENDPOINT_MAP: Record<string, string> = {
@@ -15,6 +16,13 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    const supabase = createSupabaseServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const apiKey = process.env.RUNPOD_API_KEY;
 
     // モデル名をクエリパラメータから取得（省略時はデフォルト）
