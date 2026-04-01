@@ -57,6 +57,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "画像生成にはログインが必要です。" }, { status: 401 });
     }
 
+    // クレジット残高チェック
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("credits")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile || profile.credits <= 0) {
+      return NextResponse.json({ error: "クレジットが不足しています。クレジットを購入してください。" }, { status: 402 });
+    }
+
     const formData    = await request.formData();
     const prompt      = formData.get("prompt") as string;
     const aspectRatio = formData.get("aspectRatio") as string;
@@ -89,6 +100,11 @@ export async function POST(request: NextRequest) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `RunPod API error: ${res.status}`);
+
+      // クレジット消費
+      const { error: deductError } = await supabase.rpc("deduct_credits", { amount: 1 });
+      if (deductError) console.error("Failed to deduct credits:", deductError);
+
       return NextResponse.json({ id: data.id, status: data.status, backend: "runpod" });
     }
 
@@ -151,6 +167,13 @@ export async function POST(request: NextRequest) {
     const imageUrl = (data as { data?: { url?: string }[] })?.data?.[0]?.url ?? null;
     if (!imageUrl) {
       throw new Error("BytePlus からの画像URLが取得できませんでした。");
+    }
+
+    // 成功したのでクレジットを1消費する
+    const { error: deductError } = await supabase.rpc("deduct_credits", { amount: 1 });
+    if (deductError) {
+      console.error("Failed to deduct credits:", deductError);
+      // 生成には成功したのでそのまま返す（あるいはエラーにするかは要検討だが、ここでは許容する）
     }
 
     return NextResponse.json({

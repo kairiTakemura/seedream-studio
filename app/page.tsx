@@ -38,22 +38,39 @@ export default function Home() {
   const [presets, setPresets] = useState<Preset[]>([]);
   const [presetsRefreshKey, setPresetsRefreshKey] = useState(0);
   const [user, setUser] = useState<User | null>(null);
+  const [credits, setCredits] = useState<number | null>(null);
   
   const supabase = createSupabaseBrowserClient();
 
+  // ユーザーとクレジット数を取得
+  const fetchUserData = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const currentUser = session?.user ?? null;
+    setUser(currentUser);
+
+    if (currentUser) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("credits")
+        .eq("id", currentUser.id)
+        .single();
+      if (profile) setCredits(profile.credits);
+    } else {
+      setCredits(null);
+    }
+  }, [supabase]);
+
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-    });
+    fetchUserData();
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+    } = supabase.auth.onAuthStateChange(() => {
+      fetchUserData();
     });
 
     return () => subscription.unsubscribe();
-  }, [supabase.auth]);
+  }, [fetchUserData, supabase.auth]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -156,6 +173,12 @@ export default function Home() {
           <div className="flex items-center gap-4">
             {user ? (
               <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 bg-blue-50/50 text-blue-700 px-3 py-1.5 rounded-full border border-blue-200">
+                  <span className="text-xs font-bold">残 {credits ?? 0} クレジット</span>
+                  <Link href="/pricing" className="text-[10px] bg-blue-600 hover:bg-blue-700 text-white px-2 py-0.5 rounded-full transition">
+                    追加
+                  </Link>
+                </div>
                 <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-surface-100 rounded-full border border-surface-200">
                   <UserIcon className="w-3.5 h-3.5 text-surface-500" />
                   <span className="text-xs font-medium text-surface-600 truncate max-w-[150px]">
