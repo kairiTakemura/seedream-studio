@@ -3,8 +3,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { Pencil, Trash2, Globe, Lock, ImageIcon, Download } from "lucide-react";
 import { fetchPresets, deletePreset, updatePreset } from "@/lib/presets";
-import { type Preset } from "@/lib/supabase";
+import { type Preset, createSupabaseBrowserClient } from "@/lib/supabase";
 import { toast } from "sonner";
+import { User } from "@supabase/supabase-js";
 
 interface PresetsTabProps {
   onLoadPreset?: (preset: Preset) => void;
@@ -18,18 +19,38 @@ export default function PresetsTab({ onLoadPreset, refreshKey }: PresetsTabProps
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editIsPublic, setEditIsPublic] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+
+  const supabase = createSupabaseBrowserClient();
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+    });
+  }, [supabase.auth]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await fetchPresets(tab === "public");
-      setPresets(tab === "public" ? data.filter((p) => p.is_public) : data);
+      // RLSにより、自分自身のプリセットと公開プリセットがすべて返る
+      const data = await fetchPresets(false);
+      
+      if (tab === "public") {
+        setPresets(data.filter((p) => p.is_public));
+      } else {
+        // user_id がない既存プリセットへのフォールバック対応
+        if (user) {
+          setPresets(data.filter((p) => p.user_id === user.id));
+        } else {
+          setPresets([]);
+        }
+      }
     } catch {
       toast.error("プリセットの読み込みに失敗しました");
     } finally {
       setLoading(false);
     }
-  }, [tab]);
+  }, [tab, user]);
 
   useEffect(() => { load(); }, [load, refreshKey]);
 

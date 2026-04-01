@@ -2,7 +2,10 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { toast } from "sonner";
-import { Sparkles, Wand2, BookMarked, Layers, Settings2 } from "lucide-react";
+import { Sparkles, Wand2, BookMarked, Layers, Settings2, LogOut, User as UserIcon } from "lucide-react";
+import Link from "next/link";
+import { createSupabaseBrowserClient } from "@/lib/supabase";
+import { User } from "@supabase/supabase-js";
 
 import ImageUploader from "./components/ImageUploader";
 import AspectRatioSelector from "./components/AspectRatioSelector";
@@ -34,6 +37,28 @@ export default function Home() {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [presets, setPresets] = useState<Preset[]>([]);
   const [presetsRefreshKey, setPresetsRefreshKey] = useState(0);
+  const [user, setUser] = useState<User | null>(null);
+  
+  const supabase = createSupabaseBrowserClient();
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, [supabase.auth]);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    toast.success("ログアウトしました");
+  };
 
   const loadPresets = useCallback(async () => {
     try {
@@ -88,6 +113,8 @@ export default function Home() {
 
   const handleGenerate = useCallback(async () => {
     if (!prompt.trim()) { toast.error("プロンプトを入力してください"); return; }
+    if (!user) { toast.error("画像生成にはログインが必要です"); return; }
+    
     setIsGenerating(true);
     setResultUrl(null);
     try {
@@ -110,12 +137,12 @@ export default function Home() {
     } finally {
       setIsGenerating(false);
     }
-  }, [prompt, aspectRatio, referenceFiles, poll]);
+  }, [prompt, aspectRatio, referenceFiles, poll, user]);
 
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-40 glass-panel border-b">
-        <div className="mx-auto flex h-16 max-w-6xl items-center px-4 sm:px-6">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent shadow-sm shadow-accent/20">
               <Sparkles className="h-4 w-4 text-white" />
@@ -124,6 +151,30 @@ export default function Home() {
               <h1 className="text-base font-bold tracking-tight text-surface-800">Seedream Studio</h1>
               <p className="hidden text-[11px] text-surface-400 sm:block">Powered by ByteDance Seedream 4.5</p>
             </div>
+          </div>
+          
+          <div className="flex items-center gap-4">
+            {user ? (
+              <div className="flex items-center gap-3">
+                <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-surface-100 rounded-full border border-surface-200">
+                  <UserIcon className="w-3.5 h-3.5 text-surface-500" />
+                  <span className="text-xs font-medium text-surface-600 truncate max-w-[150px]">
+                    {user.email}
+                  </span>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="p-2 text-surface-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition"
+                  title="ログアウト"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <Link href="/login" className="btn-primary flex items-center gap-2 !py-2 !px-4 text-sm">
+                ログイン / 登録
+              </Link>
+            )}
           </div>
         </div>
       </header>

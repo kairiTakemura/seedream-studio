@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createSupabaseServerClient } from "@/lib/supabase";
 
 export const maxDuration = 60;
 
@@ -49,6 +50,13 @@ function buildFluxComfyWorkflow(
 
 export async function POST(request: NextRequest) {
   try {
+    const supabase = createSupabaseServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: "画像生成にはログインが必要です。" }, { status: 401 });
+    }
+
     const formData    = await request.formData();
     const prompt      = formData.get("prompt") as string;
     const aspectRatio = formData.get("aspectRatio") as string;

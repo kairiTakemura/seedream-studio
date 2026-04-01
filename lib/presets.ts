@@ -1,7 +1,8 @@
-import { supabase, type Preset } from "./supabase";
+import { createSupabaseBrowserClient, type Preset } from "./supabase";
 
 // プリセット一覧取得（画像URL付き）
 export async function fetchPresets(publicOnly = false): Promise<Preset[]> {
+  const supabase = createSupabaseBrowserClient();
   const query = supabase
     .from("presets")
     .select("*, images:preset_images(id, preset_id, storage_path, order_index)")
@@ -34,10 +35,17 @@ export async function createPreset(
   isPublic: boolean,
   imageFiles: File[]
 ): Promise<Preset> {
+  const supabase = createSupabaseBrowserClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  
+  if (authError || !user) {
+    throw new Error("プリセットを作成するにはログインが必要です");
+  }
+
   // 1. presetsテーブルに挿入
   const { data: preset, error: presetError } = await supabase
     .from("presets")
-    .insert({ name, prompt, aspect_ratio: aspectRatio, is_public: isPublic })
+    .insert({ name, prompt, aspect_ratio: aspectRatio, is_public: isPublic, user_id: user.id })
     .select()
     .single();
 
@@ -77,6 +85,7 @@ export async function updatePreset(
   aspectRatio: string,
   isPublic: boolean
 ): Promise<void> {
+  const supabase = createSupabaseBrowserClient();
   const { error } = await supabase
     .from("presets")
     .update({ name, prompt, aspect_ratio: aspectRatio, is_public: isPublic, updated_at: new Date().toISOString() })
@@ -86,6 +95,7 @@ export async function updatePreset(
 
 // プリセット削除
 export async function deletePreset(id: string): Promise<void> {
+  const supabase = createSupabaseBrowserClient();
   // Storage内の画像も削除
   const { data: images } = await supabase
     .from("preset_images")
@@ -104,5 +114,6 @@ export async function deletePreset(id: string): Promise<void> {
 
 // 使用回数インクリメント
 export async function incrementUseCount(id: string): Promise<void> {
+  const supabase = createSupabaseBrowserClient();
   await supabase.rpc("increment_use_count", { preset_id: id });
 }
