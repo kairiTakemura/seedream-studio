@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { stripe } from "@/lib/stripe";
+import { getStripe } from "@/lib/stripe";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 // Frontend からは { priceId: string; mode: "payment" | "subscription" } が送られる
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     // client_reference_id is also recommended for webhook validation
     sessionData.client_reference_id = user.id;
 
-    const session = await stripe.checkout.sessions.create(sessionData);
+    const session = await getStripe().checkout.sessions.create(sessionData);
 
     return NextResponse.json({ url: session.url });
   } catch (err: any) {
