@@ -36,8 +36,14 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  // 完全クローズド（ログイン必須）のルーティング制御
-  if (!user && !request.nextUrl.pathname.startsWith('/login') && !request.nextUrl.pathname.startsWith('/auth')) {
+  // 完全クローズド（ログイン必須）から除外するパス（Stripe審査・Webhook対応）
+  const isPublicPath = 
+    request.nextUrl.pathname.startsWith('/login') ||
+    request.nextUrl.pathname.startsWith('/auth') ||
+    request.nextUrl.pathname === '/pricing' ||
+    request.nextUrl.pathname.startsWith('/api/webhook');
+
+  if (!user && !isPublicPath) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     return NextResponse.redirect(url);
