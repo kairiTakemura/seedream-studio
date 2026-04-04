@@ -114,6 +114,32 @@ export default function Home() {
     setActiveTab("generate");
   }, []);
 
+  // 画像を最大1024pxにリサイズ＆JPEG圧縮（Vercel 4.5MB制限対策）
+  const compressImage = useCallback(async (file: File): Promise<File> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        let { width, height } = img;
+        const MAX = 1024;
+        if (width > MAX || height > MAX) {
+          if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
+          else { width = Math.round(width * MAX / height); height = MAX; }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width; canvas.height = height;
+        canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
+        URL.revokeObjectURL(url);
+        canvas.toBlob(
+          (blob) => resolve(blob ? new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" }) : file),
+          "image/jpeg", 0.85
+        );
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+      img.src = url;
+    });
+  }, []);
+
   const poll = useCallback(async (id: string): Promise<string> => {
     const maxAttempts = 120;
     for (let i = 0; i < maxAttempts; i++) {
@@ -135,18 +161,33 @@ export default function Home() {
     setIsGenerating(true);
     setResultUrl(null);
     try {
+      // 参照画像を圧縮してからFormDataに追加（Vercel 4.5MB制限対策）
+      const compressedFiles = referenceFiles.length > 0
+        ? await Promise.all(referenceFiles.map(compressImage))
+        : [];
+
       const formData = new FormData();
       formData.append("prompt", prompt.trim());
       formData.append("aspectRatio", aspectRatio);
       formData.append("model", MODEL);
-      for (const file of referenceFiles) formData.append("referenceImages", file);
+      for (const file of compressedFiles) formData.append("referenceImages", file);
+
       const res = await fetch("/api/generate", { method: "POST", body: formData });
-      const data = await res.json();
+
+      // 非JSONレスポンス（413 Request Entity Too Large等）を適切にハンドリング
+      const text = await res.text();
+      let data: { error?: string; status?: string; imageUrl?: string; id?: string };
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error(`サーバーエラー: ${text.slice(0, 100)}`);
+      }
+
       if (!res.ok) throw new Error(data.error || "画像生成の開始に失敗しました");
       const imageUrl =
         data.status === "COMPLETED" && data.imageUrl
           ? data.imageUrl
-          : await poll(data.id);
+          : await poll(data.id!);
       setResultUrl(imageUrl);
       toast.success("画像が生成されました！");
     } catch (err: unknown) {
@@ -154,7 +195,7 @@ export default function Home() {
     } finally {
       setIsGenerating(false);
     }
-  }, [prompt, aspectRatio, referenceFiles, poll, user]);
+  }, [prompt, aspectRatio, referenceFiles, poll, user, compressImage]);
 
   return (
     <div className="min-h-screen">
