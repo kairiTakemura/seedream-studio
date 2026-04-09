@@ -33,27 +33,35 @@ export async function POST(req: NextRequest) {
     const session = event.data.object as any;
     const userId = session.client_reference_id;
     const mode = session.mode; // "payment" or "subscription"
-    
-    // Stripe側の商品メタデータから何クレジット付与するかを取得できれば一番綺麗ですが、
-    // 簡易的に price_id や金額から判定することも可能。ここでは決め打ちで付与する例とします。
-    // 例：都度100クレジット、サブスク初回は300クレジット
-    const creditsToAdd = mode === "subscription" ? 300 : 100;
+    const planType = session.metadata?.planType; // "one-time", "plus", "pro"
 
-    if (userId) {
+    if (userId && planType) {
       const { data: profile } = await supabaseAdmin
         .from("profiles")
-        .select("credits")
+        .select("credits, stamina")
         .eq("id", userId)
         .single();
         
       if (profile) {
+        let updateData: any = {
+          stripe_customer_id: session.customer,
+        };
+
+        if (planType === "one-time") {
+          updateData.credits = profile.credits + 100;
+        } else if (planType === "plus") {
+          updateData.plan = "plus";
+          updateData.stamina = 5;
+          updateData.stripe_subscription_id = session.subscription || null;
+        } else if (planType === "pro") {
+          updateData.plan = "pro";
+          updateData.stamina = 11;
+          updateData.stripe_subscription_id = session.subscription || null;
+        }
+
         await supabaseAdmin
           .from("profiles")
-          .update({ 
-            credits: profile.credits + creditsToAdd,
-            stripe_customer_id: session.customer,
-            stripe_subscription_id: session.subscription || null,
-          })
+          .update(updateData)
           .eq("id", userId);
       }
     }
@@ -61,26 +69,8 @@ export async function POST(req: NextRequest) {
 
   // 2. サブスクリプション更新時の自動決済完了イベント
   if (event.type === "invoice.payment_succeeded") {
-    const invoice = event.data.object as any;
-    // 初回決済 (billing_reason = subscription_create) は、checkout.session.completed で処理済みとする
-    if (invoice.billing_reason === "subscription_cycle") {
-      const customerId = invoice.customer;
-      
-      // customerId から対象のプロフィールを取得
-      const { data: profile } = await supabaseAdmin
-        .from("profiles")
-        .select("id, credits")
-        .eq("stripe_customer_id", customerId)
-        .single();
-
-      if (profile) {
-        // サブスク更新毎に300クレジット付与
-        await supabaseAdmin
-          .from("profiles")
-          .update({ credits: profile.credits + 300 })
-          .eq("id", profile.id);
-      }
-    }
+    // 決済成功時。月額のスタミナは毎朝5:00のcronで回復するため、ここでのスタミナ追加処理は不要。
+    // 決済失敗時などは invoice.payment_failed や customer.subscription.deleted で対応する。
   }
 
   return NextResponse.json({ received: true });

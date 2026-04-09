@@ -14,9 +14,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { priceId, mode } = await req.json();
+    const { priceId, mode, planType } = await req.json();
 
-    if (!priceId || !mode) {
+    if (!priceId || !mode || !planType) {
       return NextResponse.json({ error: "Missing required parameters" }, { status: 400 });
     }
 
@@ -37,6 +37,7 @@ export async function POST(req: NextRequest) {
       // Create session specific metadata so our webhook knows who bought
       metadata: {
         userId: user.id,
+        planType: planType,
       },
     };
 

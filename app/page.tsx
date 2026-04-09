@@ -348,10 +348,13 @@ export default function Home() {
       )}
 
       <footer className="border-t border-surface-200 bg-white/50 py-6">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6">
-          <p className="text-center text-xs text-surface-400">
+        <div className="mx-auto flex flex-col items-center max-w-6xl px-4 sm:px-6">
+          <p className="text-center text-xs text-surface-400 mb-2">
             Seedream Studio · Powered by ByteDance Seedream 4.5
           </p>
+          <Link href="/tokushoho" className="text-xs text-surface-400 hover:text-surface-600 underline">
+            特定商取引法に基づく表記
+          </Link>
         </div>
       </footer>
     </div>

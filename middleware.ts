@@ -38,9 +38,11 @@ export async function middleware(request: NextRequest) {
 
   // 完全クローズド（ログイン必須）から除外するパス（Stripe審査・Webhook対応）
   const isPublicPath = 
+    request.nextUrl.pathname === '/' ||
     request.nextUrl.pathname.startsWith('/login') ||
     request.nextUrl.pathname.startsWith('/auth') ||
     request.nextUrl.pathname === '/pricing' ||
+    request.nextUrl.pathname === '/tokushoho' ||
     request.nextUrl.pathname.startsWith('/api/webhook');
 
   if (!user && !isPublicPath) {

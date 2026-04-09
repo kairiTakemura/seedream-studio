@@ -60,15 +60,15 @@ export async function POST(request: NextRequest) {
     // プロフィール取得（is_admin チェック含む）
     const { data: profile } = await supabase
       .from("profiles")
-      .select("credits, is_admin")
+      .select("credits, stamina, is_admin")
       .eq("id", user.id)
       .single();
 
     const isAdmin = profile?.is_admin === true;
 
-    // Admin以外はクレジット残高チェック
-    if (!isAdmin && (!profile || profile.credits <= 0)) {
-      return NextResponse.json({ error: "クレジットが不足しています。クレジットを購入してください。" }, { status: 402 });
+    // Admin以外はクレジット・スタミナ残高チェック
+    if (!isAdmin && (!profile || (profile.credits <= 0 && profile.stamina <= 0))) {
+      return NextResponse.json({ error: "クレジットまたはスタミナが不足しています。プランに登録するかクレジットを購入してください。" }, { status: 402 });
     }
 
     const formData    = await request.formData();

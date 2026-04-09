@@ -3,6 +3,7 @@
 import { useState } from 'react';
 
 type CheckoutMode = 'payment' | 'subscription';
+type PlanType = 'one-time' | 'plus' | 'pro';
 
 type Plan = {
   name: string;
@@ -19,6 +20,7 @@ type Plan = {
   appeal?: string;
   kind: string;
   monthlyCapacityLabel: string;
+  planType: PlanType;
 };
 
 const sharedFeatures = [
@@ -46,6 +48,7 @@ const plans: Plan[] = [
     mode: 'payment',
     priceId: 'price_credit_100', // TODO: Stripeの実際の価格IDに変更
     kind: '買い切り',
+    planType: 'one-time',
   },
   {
     name: 'Plus',
@@ -64,6 +67,7 @@ const plans: Plan[] = [
     mode: 'subscription',
     priceId: 'price_plus_monthly', // TODO: Stripeの実際の価格IDに変更
     kind: '月額サブスク',
+    planType: 'plus',
   },
   {
     name: 'Pro',
@@ -85,6 +89,7 @@ const plans: Plan[] = [
     badge: '一番人気',
     appeal: '月150枚以上使うなら最もお得',
     kind: '月額サブスク',
+    planType: 'pro',
   },
 ];
 
@@ -144,7 +149,7 @@ export default function PricingPage() {
 
   const isAnyLoading = loadingPriceId !== null;
 
-  const handleCheckout = async (priceId: string, mode: CheckoutMode) => {
+  const handleCheckout = async (priceId: string, mode: CheckoutMode, planType: PlanType) => {
     if (isAnyLoading) return;
 
     try {
@@ -154,7 +159,7 @@ export default function PricingPage() {
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ priceId, mode }),
+        body: JSON.stringify({ priceId, mode, planType }),
       });
       const data = await res.json();
       
@@ -305,7 +310,7 @@ export default function PricingPage() {
                     <button
                       type="button"
                       onClick={() => {
-                        void handleCheckout(plan.priceId, plan.mode);
+                        void handleCheckout(plan.priceId, plan.mode, plan.planType);
                       }}
                       disabled={isAnyLoading}
                       aria-busy={isLoading}
