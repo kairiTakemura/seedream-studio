@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { toast } from "sonner";
-import { Sparkles, Wand2, BookMarked, Layers, Settings2, LogOut, User as UserIcon } from "lucide-react";
+import { Sparkles, Wand2, BookMarked, Layers, Settings2, LogOut, User as UserIcon, Shuffle } from "lucide-react";
 import Link from "next/link";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { User } from "@supabase/supabase-js";
@@ -14,14 +14,16 @@ import GeneratingLoader from "./components/GeneratingLoader";
 import SavePresetModal from "./components/SavePresetModal";
 import PresetsTab from "./components/PresetsTab";
 import BatchTab from "./components/BatchTab";
+import VariationTab from "./components/VariationTab";
 import { fetchPresets } from "@/lib/presets";
 import { type Preset } from "@/lib/supabase";
 
-type TabValue = "generate" | "batch" | "presets";
+type TabValue = "generate" | "batch" | "variation" | "presets";
 
 const TABS = [
   { value: "generate" as TabValue, label: "通常生成", icon: Wand2 },
   { value: "batch" as TabValue, label: "一括生成", icon: Layers },
+  { value: "variation" as TabValue, label: "バリエーション", icon: Shuffle },
   { value: "presets" as TabValue, label: "プリセット管理", icon: Settings2 },
 ];
 
@@ -328,6 +330,8 @@ export default function Home() {
         )}
 
         {activeTab === "batch" && <BatchTab presets={presets} />}
+
+        {activeTab === "variation" && <VariationTab />}
 
         {activeTab === "presets" && (
           <PresetsTab
