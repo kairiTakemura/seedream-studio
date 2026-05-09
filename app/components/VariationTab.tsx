@@ -256,14 +256,27 @@ export default function VariationTab({ initialPreset, onPresetConsumed, onPreset
 
           {/* バリエーション画像 */}
           <div>
-            <label className="mb-2 block text-sm font-semibold text-surface-700">
-              バリエーション画像（2枚目・複数）
+            <div className="mb-2 flex items-center justify-between">
+              <label className="block text-sm font-semibold text-surface-700">
+                バリエーション画像（2枚目・複数）
+                {variationFiles.length > 0 && (
+                  <span className="ml-2 rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
+                    {variationFiles.length}枚
+                  </span>
+                )}
+              </label>
               {variationFiles.length > 0 && (
-                <span className="ml-2 rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
-                  {variationFiles.length}枚
-                </span>
+                <button
+                  type="button"
+                  onClick={() => setVariationFiles([])}
+                  className="flex items-center gap-1 text-xs text-surface-500 hover:text-red-500 transition-colors"
+                  title="バリエーション画像をすべて削除"
+                >
+                  <X className="h-3 w-3" />
+                  すべてクリア
+                </button>
               )}
-            </label>
+            </div>
 
             <div className="mb-2 flex gap-2">
               <button
