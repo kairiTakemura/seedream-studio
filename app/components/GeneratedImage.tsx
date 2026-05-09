@@ -10,8 +10,34 @@ interface GeneratedImageProps {
 
 export async function downloadImage(url: string, filename?: string) {
   const name = filename || `seedream-${Date.now()}.jpg`;
+
+  const triggerDownload = (blobUrl: string) => {
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  // 1. クロスオリジン画像でも download 属性が効くよう blob 化
+  //    まず直接 fetch を試し、CORS で失敗したらサーバー側プロキシ経由で取得
   try {
-    // aタグにdownload属性をつけて直接リンクを開く方式（CORS回避）
+    let res: Response;
+    try {
+      res = await fetch(url, { mode: "cors" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch {
+      res = await fetch(`/api/proxy-image?url=${encodeURIComponent(url)}`);
+      if (!res.ok) throw new Error(`proxy HTTP ${res.status}`);
+    }
+    const blob = await res.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    triggerDownload(objectUrl);
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    return;
+  } catch {
+    // 最終フォールバック: 新規タブで開く（手動保存用、一括では機能しない）
     const a = document.createElement("a");
     a.href = url;
     a.download = name;
@@ -20,8 +46,6 @@ export async function downloadImage(url: string, filename?: string) {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-  } catch {
-    window.open(url, "_blank");
   }
 }
 
