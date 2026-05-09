@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
-import { Upload, X, Wand2, Download, FolderOpen, Images } from "lucide-react";
+import { useState, useCallback, useRef, useEffect } from "react";
+import { Upload, X, Wand2, Download, FolderOpen, Images, BookMarked } from "lucide-react";
 import { downloadImage } from "./GeneratedImage";
 import AspectRatioSelector from "./AspectRatioSelector";
+import SavePresetModal from "./SavePresetModal";
 import { fileToBytePlusSize } from "@/lib/aspectRatio";
+import { type Preset } from "@/lib/supabase";
 import { toast } from "sonner";
 
 interface VariationResult {
@@ -49,7 +51,13 @@ function compressImage(file: File): Promise<File> {
   });
 }
 
-export default function VariationTab() {
+interface VariationTabProps {
+  initialPreset?: Preset | null;
+  onPresetConsumed?: () => void;
+  onPresetSaved?: () => void;
+}
+
+export default function VariationTab({ initialPreset, onPresetConsumed, onPresetSaved }: VariationTabProps = {}) {
   const [baseFile, setBaseFile] = useState<File | null>(null);
   const [basePreview, setBasePreview] = useState<string | null>(null);
   const [variationFiles, setVariationFiles] = useState<File[]>([]);
@@ -57,6 +65,7 @@ export default function VariationTab() {
   const [aspectRatio, setAspectRatio] = useState("1:1");
   const [matchInputAspect, setMatchInputAspect] = useState(false);
   const [aspectSource, setAspectSource] = useState<"base" | "variation">("variation");
+  const [showSaveModal, setShowSaveModal] = useState(false);
   const [results, setResults] = useState<VariationResult[]>([]);
   const [isRunning, setIsRunning] = useState(false);
 
@@ -70,6 +79,44 @@ export default function VariationTab() {
     setBaseFile(file);
     setBasePreview(URL.createObjectURL(file));
   };
+
+  // プリセットからのロード: 1枚目=ベース、2枚目以降=バリエーション
+  useEffect(() => {
+    if (!initialPreset) return;
+    const preset = initialPreset;
+    (async () => {
+      try {
+        setPrompt(preset.prompt);
+        setAspectRatio(preset.aspect_ratio);
+        const imgs = preset.images || [];
+        if (imgs.length === 0) {
+          setBaseFile(null);
+          setBasePreview(null);
+          setVariationFiles([]);
+          return;
+        }
+        const fetched = await Promise.all(
+          imgs.map(async (img, idx) => {
+            const res = await fetch(img.url!);
+            const blob = await res.blob();
+            const ext = blob.type.includes("png") ? "png" : "jpg";
+            const name = idx === 0 ? `base.${ext}` : `variation-${idx}.${ext}`;
+            return new File([blob], name, { type: blob.type });
+          })
+        );
+        const [base, ...vars] = fetched;
+        setBaseFile(base);
+        setBasePreview(URL.createObjectURL(base));
+        setVariationFiles(vars);
+        toast.success(`「${preset.name}」をロードしました`);
+      } catch {
+        toast.error("プリセットのロードに失敗しました");
+      } finally {
+        onPresetConsumed?.();
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialPreset]);
 
   const addVariationFiles = (files: FileList | null) => {
     if (!files) return;
@@ -365,6 +412,7 @@ export default function VariationTab() {
             onClick={handleRun}
             disabled={isRunning || !baseFile || variationFiles.length === 0 || !prompt.trim()}
             className="btn-primary w-full !py-3 gap-2"
+            type="button"
           >
             {isRunning ? (
               <>
@@ -381,6 +429,17 @@ export default function VariationTab() {
               </>
             )}
           </button>
+
+          {(prompt.trim() || baseFile || variationFiles.length > 0) && (
+            <button
+              type="button"
+              onClick={() => setShowSaveModal(true)}
+              className="btn-secondary w-full gap-2"
+            >
+              <BookMarked className="h-4 w-4" />
+              プリセットとして保存
+            </button>
+          )}
         </div>
 
         {/* 右: 結果グリッド */}
@@ -451,6 +510,16 @@ export default function VariationTab() {
           )}
         </div>
       </div>
+
+      {showSaveModal && (
+        <SavePresetModal
+          prompt={prompt}
+          aspectRatio={aspectRatio}
+          imageFiles={baseFile ? [baseFile, ...variationFiles] : variationFiles}
+          onClose={() => setShowSaveModal(false)}
+          onSaved={() => onPresetSaved?.()}
+        />
+      )}
     </div>
   );
 }

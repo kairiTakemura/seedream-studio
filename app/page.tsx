@@ -37,6 +37,7 @@ export default function Home() {
   const [aspectRatio, setAspectRatio] = useState("1:1");
   const [matchInputAspect, setMatchInputAspect] = useState(false);
   const [aspectSourceIndex, setAspectSourceIndex] = useState(0);
+  const [variationInitialPreset, setVariationInitialPreset] = useState<Preset | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [showSaveModal, setShowSaveModal] = useState(false);
@@ -117,6 +118,12 @@ export default function Home() {
     }
 
     setActiveTab("generate");
+  }, []);
+
+  // プリセットをバリエーション生成にロード
+  const handleLoadPresetVariation = useCallback((preset: Preset) => {
+    setVariationInitialPreset(preset);
+    setActiveTab("variation");
   }, []);
 
   // 画像を最大1024pxにリサイズ＆JPEG圧縮（Vercel 4.5MB制限対策）
@@ -379,12 +386,19 @@ export default function Home() {
 
         {activeTab === "batch" && <BatchTab presets={presets} />}
 
-        {activeTab === "variation" && <VariationTab />}
+        {activeTab === "variation" && (
+          <VariationTab
+            initialPreset={variationInitialPreset}
+            onPresetConsumed={() => setVariationInitialPreset(null)}
+            onPresetSaved={() => setPresetsRefreshKey((k) => k + 1)}
+          />
+        )}
 
         {activeTab === "presets" && (
           <PresetsTab
             refreshKey={presetsRefreshKey}
             onLoadPreset={handleLoadPreset}
+            onLoadPresetVariation={handleLoadPresetVariation}
           />
         )}
       </main>

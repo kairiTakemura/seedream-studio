@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Pencil, Trash2, Globe, Lock, ImageIcon, Download } from "lucide-react";
+import { Pencil, Trash2, Globe, Lock, ImageIcon, Download, Shuffle } from "lucide-react";
 import { fetchPresets, deletePreset, updatePreset } from "@/lib/presets";
 import { type Preset, createSupabaseBrowserClient } from "@/lib/supabase";
 import { toast } from "sonner";
@@ -9,10 +9,11 @@ import { User } from "@supabase/supabase-js";
 
 interface PresetsTabProps {
   onLoadPreset?: (preset: Preset) => void;
+  onLoadPresetVariation?: (preset: Preset) => void;
   refreshKey?: number;
 }
 
-export default function PresetsTab({ onLoadPreset, refreshKey }: PresetsTabProps) {
+export default function PresetsTab({ onLoadPreset, onLoadPresetVariation, refreshKey }: PresetsTabProps) {
   const [tab, setTab] = useState<"mine" | "public">("mine");
   const [presets, setPresets] = useState<Preset[]>([]);
   const [loading, setLoading] = useState(true);
@@ -167,9 +168,21 @@ export default function PresetsTab({ onLoadPreset, refreshKey }: PresetsTabProps
                             toast.success(`「${preset.name}」を通常生成にロードしました`);
                           }}
                           className="btn-primary flex-1 !py-1.5 text-xs gap-1"
+                          title="通常生成にロード"
                         >
                           <Download className="h-3 w-3 rotate-180" />
-                          編集
+                          通常
+                        </button>
+                      )}
+                      {/* バリエーションにロード */}
+                      {onLoadPresetVariation && (
+                        <button
+                          onClick={() => onLoadPresetVariation(preset)}
+                          className="btn-secondary flex-1 !py-1.5 text-xs gap-1"
+                          title="バリエーション生成にロード（1枚目=ベース、2枚目以降=バリエーション）"
+                        >
+                          <Shuffle className="h-3 w-3" />
+                          バリエ
                         </button>
                       )}
                       {tab === "mine" && (
