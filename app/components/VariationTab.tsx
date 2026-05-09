@@ -62,6 +62,9 @@ export default function VariationTab() {
 
   const folderInputRef = useRef<HTMLInputElement>(null);
   const filesInputRef = useRef<HTMLInputElement>(null);
+  const baseInputRef = useRef<HTMLInputElement>(null);
+  const [isDraggingBase, setIsDraggingBase] = useState(false);
+  const [isDraggingVariation, setIsDraggingVariation] = useState(false);
 
   const handleBaseFile = (file: File) => {
     setBaseFile(file);
@@ -175,16 +178,32 @@ export default function VariationTab() {
                 </button>
               </div>
             ) : (
-              <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-surface-200 bg-surface-50 py-12 hover:border-surface-300 hover:bg-surface-100 transition-colors">
-                <Upload className="h-6 w-6 text-surface-300" />
+              <div
+                onClick={() => baseInputRef.current?.click()}
+                onDragOver={(e) => { e.preventDefault(); setIsDraggingBase(true); }}
+                onDragLeave={(e) => { e.preventDefault(); setIsDraggingBase(false); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsDraggingBase(false);
+                  const file = Array.from(e.dataTransfer.files).find((f) => f.type.startsWith("image/"));
+                  if (file) handleBaseFile(file);
+                }}
+                className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed py-12 transition-colors ${
+                  isDraggingBase
+                    ? "border-accent bg-accent/5"
+                    : "border-surface-200 bg-surface-50 hover:border-surface-300 hover:bg-surface-100"
+                }`}
+              >
+                <Upload className={`h-6 w-6 ${isDraggingBase ? "text-accent" : "text-surface-300"}`} />
                 <span className="text-sm text-surface-500">クリックまたはドラッグ＆ドロップ</span>
                 <input
+                  ref={baseInputRef}
                   type="file"
                   accept="image/*"
                   className="hidden"
                   onChange={(e) => e.target.files?.[0] && handleBaseFile(e.target.files[0])}
                 />
-              </label>
+              </div>
             )}
           </div>
 
@@ -238,7 +257,18 @@ export default function VariationTab() {
             </div>
 
             {variationFiles.length > 0 ? (
-              <div className="grid max-h-64 grid-cols-4 gap-2 overflow-y-auto rounded-xl border border-surface-200 bg-surface-50 p-2">
+              <div
+                onDragOver={(e) => { e.preventDefault(); setIsDraggingVariation(true); }}
+                onDragLeave={(e) => { e.preventDefault(); setIsDraggingVariation(false); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsDraggingVariation(false);
+                  addVariationFiles(e.dataTransfer.files);
+                }}
+                className={`grid max-h-64 grid-cols-4 gap-2 overflow-y-auto rounded-xl border-2 border-dashed bg-surface-50 p-2 transition-colors ${
+                  isDraggingVariation ? "border-accent bg-accent/5" : "border-surface-200"
+                }`}
+              >
                 {variationFiles.map((f, i) => (
                   <div key={`${i}-${f.name}`} className="relative aspect-square overflow-hidden rounded-lg border border-surface-200 bg-white">
                     <img src={URL.createObjectURL(f)} alt={f.name} className="h-full w-full object-cover" />
@@ -255,9 +285,22 @@ export default function VariationTab() {
                 ))}
               </div>
             ) : (
-              <p className="rounded-xl bg-surface-50 px-4 py-6 text-center text-sm text-surface-400">
-                画像またはフォルダを選択してください
-              </p>
+              <div
+                onDragOver={(e) => { e.preventDefault(); setIsDraggingVariation(true); }}
+                onDragLeave={(e) => { e.preventDefault(); setIsDraggingVariation(false); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsDraggingVariation(false);
+                  addVariationFiles(e.dataTransfer.files);
+                }}
+                className={`rounded-xl border-2 border-dashed px-4 py-6 text-center text-sm transition-colors ${
+                  isDraggingVariation
+                    ? "border-accent bg-accent/5 text-accent"
+                    : "border-surface-200 bg-surface-50 text-surface-400"
+                }`}
+              >
+                画像またはフォルダを選択 / ここにドラッグ＆ドロップ
+              </div>
             )}
           </div>
 
