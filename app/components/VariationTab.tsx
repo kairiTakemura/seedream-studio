@@ -185,9 +185,16 @@ export default function VariationTab({ initialPreset, onPresetConsumed, onPreset
     if (!prompt.trim()) { toast.error("プロンプトを入力してください"); return; }
 
     if (mode === "sequential") {
-      const totalPerCall = baseFiles.length + 1;
+      const basePick = randomBaseEnabled
+        ? Math.max(1, Math.min(randomBasePick, baseFiles.length))
+        : baseFiles.length;
+      const totalPerCall = basePick + 1;
       if (totalPerCall > MAX_REF_IMAGES) {
-        toast.error(`参照画像は合計${MAX_REF_IMAGES}枚以下にしてください（ベース${baseFiles.length}+バリエ1）`);
+        toast.error(`参照画像は合計${MAX_REF_IMAGES}枚以下にしてください（ベース${basePick}+バリエ1）`);
+        return;
+      }
+      if (randomBaseEnabled && randomBasePick > baseFiles.length) {
+        toast.error("ベースランダム選択数がベース画像枚数を超えています");
         return;
       }
       const initial: VariationResult[] = variationFiles.map((f, i) => ({
@@ -202,10 +209,11 @@ export default function VariationTab({ initialPreset, onPresetConsumed, onPreset
         const key = `seq-${i}-${file.name}`;
         setResults((prev) => prev.map((r) => r.key === key ? { ...r, status: "generating" } : r));
         try {
+          const basesForCall = randomBaseEnabled ? pickRandom(baseFiles, basePick) : baseFiles;
           const aspectRef = matchInputAspect
-            ? (aspectSource === "base" ? baseFiles[0] : file)
+            ? (aspectSource === "base" ? basesForCall[0] : file)
             : null;
-          const url = await generateOne(baseFiles, [file], aspectRef);
+          const url = await generateOne(basesForCall, [file], aspectRef);
           setResults((prev) => prev.map((r) => r.key === key ? { ...r, status: "done", imageUrl: url } : r));
         } catch (err) {
           setResults((prev) => prev.map((r) =>
@@ -573,59 +581,59 @@ export default function VariationTab({ initialPreset, onPresetConsumed, onPreset
               </button>
             </div>
             {mode === "random" && (
-              <div className="space-y-2">
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="text-xs text-surface-600">
-                    バリエから1回あたり
-                    <input
-                      type="number"
-                      min={1}
-                      max={Math.max(1, variationFiles.length || 1)}
-                      value={randomPick}
-                      onChange={(e) => setRandomPick(Math.max(1, parseInt(e.target.value || "1", 10)))}
-                      className="input-base !py-1.5 mt-1 w-full"
-                    />
-                  </label>
-                  <label className="text-xs text-surface-600">
-                    実行回数
-                    <input
-                      type="number"
-                      min={1}
-                      max={100}
-                      value={randomIterations}
-                      onChange={(e) => setRandomIterations(Math.max(1, parseInt(e.target.value || "1", 10)))}
-                      className="input-base !py-1.5 mt-1 w-full"
-                    />
-                  </label>
-                </div>
-                <div className="border-t border-surface-200 pt-2 space-y-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={randomBaseEnabled}
-                      onChange={(e) => setRandomBaseEnabled(e.target.checked)}
-                      className="h-3.5 w-3.5 rounded border-surface-300 text-accent focus:ring-accent"
-                    />
-                    <span className="text-xs font-medium text-surface-700">
-                      ベース画像もランダム選択
-                    </span>
-                  </label>
-                  {randomBaseEnabled && (
-                    <label className="ml-6 block text-xs text-surface-600">
-                      ベースから1回あたり
-                      <input
-                        type="number"
-                        min={1}
-                        max={Math.max(1, baseFiles.length || 1)}
-                        value={randomBasePick}
-                        onChange={(e) => setRandomBasePick(Math.max(1, parseInt(e.target.value || "1", 10)))}
-                        className="input-base !py-1.5 mt-1 w-32"
-                      />
-                    </label>
-                  )}
-                </div>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-xs text-surface-600">
+                  バリエから1回あたり
+                  <input
+                    type="number"
+                    min={1}
+                    max={Math.max(1, variationFiles.length || 1)}
+                    value={randomPick}
+                    onChange={(e) => setRandomPick(Math.max(1, parseInt(e.target.value || "1", 10)))}
+                    className="input-base !py-1.5 mt-1 w-full"
+                  />
+                </label>
+                <label className="text-xs text-surface-600">
+                  実行回数
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={randomIterations}
+                    onChange={(e) => setRandomIterations(Math.max(1, parseInt(e.target.value || "1", 10)))}
+                    className="input-base !py-1.5 mt-1 w-full"
+                  />
+                </label>
               </div>
             )}
+
+            {/* ベース画像ランダム選択（モードと独立） */}
+            <div className="border-t border-surface-200 pt-2 space-y-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={randomBaseEnabled}
+                  onChange={(e) => setRandomBaseEnabled(e.target.checked)}
+                  className="h-3.5 w-3.5 rounded border-surface-300 text-accent focus:ring-accent"
+                />
+                <span className="text-xs font-medium text-surface-700">
+                  ベース画像をランダム選択（毎回別の組み合わせ）
+                </span>
+              </label>
+              {randomBaseEnabled && (
+                <label className="ml-6 block text-xs text-surface-600">
+                  ベースから1回あたり
+                  <input
+                    type="number"
+                    min={1}
+                    max={Math.max(1, baseFiles.length || 1)}
+                    value={randomBasePick}
+                    onChange={(e) => setRandomBasePick(Math.max(1, parseInt(e.target.value || "1", 10)))}
+                    className="input-base !py-1.5 mt-1 w-32"
+                  />
+                </label>
+              )}
+            </div>
           </div>
 
           <button
