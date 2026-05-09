@@ -33,11 +33,12 @@ export async function createPreset(
   prompt: string,
   aspectRatio: string,
   isPublic: boolean,
-  imageFiles: File[]
+  imageFiles: File[],
+  baseCount: number = 1
 ): Promise<Preset> {
   const supabase = createSupabaseBrowserClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
-  
+
   if (authError || !user) {
     throw new Error("プリセットを作成するにはログインが必要です");
   }
@@ -45,7 +46,7 @@ export async function createPreset(
   // 1. presetsテーブルに挿入
   const { data: preset, error: presetError } = await supabase
     .from("presets")
-    .insert({ name, prompt, aspect_ratio: aspectRatio, is_public: isPublic, user_id: user.id })
+    .insert({ name, prompt, aspect_ratio: aspectRatio, is_public: isPublic, user_id: user.id, base_count: baseCount })
     .select()
     .single();
 

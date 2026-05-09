@@ -20,6 +20,7 @@ export type Preset = {
   use_count: number;
   created_at: string;
   user_id?: string;
+  base_count?: number; // バリエーションプリセット用: 先頭何枚をベース画像とみなすか (default 1)
   images: PresetImage[];
 };
 

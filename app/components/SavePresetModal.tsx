@@ -9,6 +9,7 @@ interface SavePresetModalProps {
   prompt: string;
   aspectRatio: string;
   imageFiles: File[];
+  baseCount?: number; // バリエーションプリセットで先頭何枚がベースか
   onClose: () => void;
   onSaved: () => void;
 }
@@ -17,6 +18,7 @@ export default function SavePresetModal({
   prompt,
   aspectRatio,
   imageFiles,
+  baseCount = 1,
   onClose,
   onSaved,
 }: SavePresetModalProps) {
@@ -31,7 +33,7 @@ export default function SavePresetModal({
     }
     setSaving(true);
     try {
-      await createPreset(name.trim(), prompt, aspectRatio, isPublic, imageFiles);
+      await createPreset(name.trim(), prompt, aspectRatio, isPublic, imageFiles, baseCount);
       toast.success("プリセットを保存しました！");
       onSaved();
       onClose();
