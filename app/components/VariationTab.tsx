@@ -22,6 +22,32 @@ function basename(name: string): string {
   return i > 0 ? name.slice(0, i) : name;
 }
 
+// 画像を最大1024pxにリサイズ＆JPEG圧縮（Vercel 4.5MB制限対策）
+function compressImage(file: File): Promise<File> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      let { width, height } = img;
+      const MAX = 1024;
+      if (width > MAX || height > MAX) {
+        if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
+        else { width = Math.round(width * MAX / height); height = MAX; }
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width; canvas.height = height;
+      canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
+      URL.revokeObjectURL(url);
+      canvas.toBlob(
+        (blob) => resolve(blob ? new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" }) : file),
+        "image/jpeg", 0.85
+      );
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+    img.src = url;
+  });
+}
+
 export default function VariationTab() {
   const [baseFile, setBaseFile] = useState<File | null>(null);
   const [basePreview, setBasePreview] = useState<string | null>(null);
@@ -55,15 +81,22 @@ export default function VariationTab() {
 
   const generateOne = useCallback(
     async (base: File, variation: File): Promise<string> => {
+      const [compBase, compVar] = await Promise.all([compressImage(base), compressImage(variation)]);
       const formData = new FormData();
       formData.append("prompt", prompt.trim());
       formData.append("aspectRatio", aspectRatio);
       formData.append("model", MODEL);
-      formData.append("referenceImages", base);
-      formData.append("referenceImages", variation);
+      formData.append("referenceImages", compBase);
+      formData.append("referenceImages", compVar);
 
       const res = await fetch("/api/generate", { method: "POST", body: formData });
-      const data = await res.json();
+      const text = await res.text();
+      let data: { error?: string; status?: string; imageUrl?: string };
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error(`サーバーエラー: ${text.slice(0, 100)}`);
+      }
       if (!res.ok) throw new Error(data.error || "生成失敗");
       if (data.status === "COMPLETED" && data.imageUrl) return data.imageUrl;
       throw new Error("画像URLが取得できませんでした");
