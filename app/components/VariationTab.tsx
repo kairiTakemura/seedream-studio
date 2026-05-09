@@ -78,6 +78,8 @@ export default function VariationTab({ initialPreset, onPresetConsumed, onPreset
   const [mode, setMode] = useState<Mode>("sequential");
   const [randomPick, setRandomPick] = useState(2);
   const [randomIterations, setRandomIterations] = useState(5);
+  const [randomBaseEnabled, setRandomBaseEnabled] = useState(false);
+  const [randomBasePick, setRandomBasePick] = useState(1);
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [results, setResults] = useState<VariationResult[]>([]);
   const [isRunning, setIsRunning] = useState(false);
@@ -221,13 +223,20 @@ export default function VariationTab({ initialPreset, onPresetConsumed, onPreset
     // ── ランダムモード ──
     const pick = Math.max(1, Math.min(randomPick, variationFiles.length));
     const iters = Math.max(1, randomIterations);
-    const totalPerCall = baseFiles.length + pick;
+    const basePick = randomBaseEnabled
+      ? Math.max(1, Math.min(randomBasePick, baseFiles.length))
+      : baseFiles.length;
+    const totalPerCall = basePick + pick;
     if (totalPerCall > MAX_REF_IMAGES) {
-      toast.error(`参照画像は合計${MAX_REF_IMAGES}枚以下にしてください（ベース${baseFiles.length}+ランダム${pick}）`);
+      toast.error(`参照画像は合計${MAX_REF_IMAGES}枚以下にしてください（ベース${basePick}+ランダム${pick}）`);
       return;
     }
     if (pick > variationFiles.length) {
       toast.error("ランダム選択数がバリエーション枚数を超えています");
+      return;
+    }
+    if (randomBaseEnabled && randomBasePick > baseFiles.length) {
+      toast.error("ベースランダム選択数がベース画像枚数を超えています");
       return;
     }
 
@@ -242,15 +251,16 @@ export default function VariationTab({ initialPreset, onPresetConsumed, onPreset
     for (let i = 0; i < iters; i++) {
       const key = `rand-${i}`;
       const picks = pickRandom(variationFiles, pick);
+      const basesForCall = randomBaseEnabled ? pickRandom(baseFiles, basePick) : baseFiles;
       const label = picks.map((f) => basename(f.name)).join("+");
       setResults((prev) => prev.map((r) =>
         r.key === key ? { ...r, status: "generating", fileName: label } : r
       ));
       try {
         const aspectRef = matchInputAspect
-          ? (aspectSource === "base" ? baseFiles[0] : picks[0])
+          ? (aspectSource === "base" ? basesForCall[0] : picks[0])
           : null;
-        const url = await generateOne(baseFiles, picks, aspectRef);
+        const url = await generateOne(basesForCall, picks, aspectRef);
         setResults((prev) => prev.map((r) => r.key === key ? { ...r, status: "done", imageUrl: url } : r));
       } catch (err) {
         setResults((prev) => prev.map((r) =>
@@ -563,29 +573,57 @@ export default function VariationTab({ initialPreset, onPresetConsumed, onPreset
               </button>
             </div>
             {mode === "random" && (
-              <div className="grid grid-cols-2 gap-2">
-                <label className="text-xs text-surface-600">
-                  1回あたりの選択枚数
-                  <input
-                    type="number"
-                    min={1}
-                    max={Math.max(1, variationFiles.length || 1)}
-                    value={randomPick}
-                    onChange={(e) => setRandomPick(Math.max(1, parseInt(e.target.value || "1", 10)))}
-                    className="input-base !py-1.5 mt-1 w-full"
-                  />
-                </label>
-                <label className="text-xs text-surface-600">
-                  実行回数
-                  <input
-                    type="number"
-                    min={1}
-                    max={100}
-                    value={randomIterations}
-                    onChange={(e) => setRandomIterations(Math.max(1, parseInt(e.target.value || "1", 10)))}
-                    className="input-base !py-1.5 mt-1 w-full"
-                  />
-                </label>
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="text-xs text-surface-600">
+                    バリエから1回あたり
+                    <input
+                      type="number"
+                      min={1}
+                      max={Math.max(1, variationFiles.length || 1)}
+                      value={randomPick}
+                      onChange={(e) => setRandomPick(Math.max(1, parseInt(e.target.value || "1", 10)))}
+                      className="input-base !py-1.5 mt-1 w-full"
+                    />
+                  </label>
+                  <label className="text-xs text-surface-600">
+                    実行回数
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={randomIterations}
+                      onChange={(e) => setRandomIterations(Math.max(1, parseInt(e.target.value || "1", 10)))}
+                      className="input-base !py-1.5 mt-1 w-full"
+                    />
+                  </label>
+                </div>
+                <div className="border-t border-surface-200 pt-2 space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={randomBaseEnabled}
+                      onChange={(e) => setRandomBaseEnabled(e.target.checked)}
+                      className="h-3.5 w-3.5 rounded border-surface-300 text-accent focus:ring-accent"
+                    />
+                    <span className="text-xs font-medium text-surface-700">
+                      ベース画像もランダム選択
+                    </span>
+                  </label>
+                  {randomBaseEnabled && (
+                    <label className="ml-6 block text-xs text-surface-600">
+                      ベースから1回あたり
+                      <input
+                        type="number"
+                        min={1}
+                        max={Math.max(1, baseFiles.length || 1)}
+                        value={randomBasePick}
+                        onChange={(e) => setRandomBasePick(Math.max(1, parseInt(e.target.value || "1", 10)))}
+                        className="input-base !py-1.5 mt-1 w-32"
+                      />
+                    </label>
+                  )}
+                </div>
               </div>
             )}
           </div>
