@@ -74,6 +74,7 @@ export async function POST(request: NextRequest) {
     const formData    = await request.formData();
     const prompt      = formData.get("prompt") as string;
     const aspectRatio = formData.get("aspectRatio") as string;
+    const customSize  = (formData.get("customSize") as string | null) ?? null;
     const model       = (formData.get("model") as string) || "seedream-4.5";
     const refImages   = formData.getAll("referenceImages") as File[];
 
@@ -123,7 +124,10 @@ export async function POST(request: NextRequest) {
 
     const byteplusModel = process.env.BYTEPLUS_ENDPOINT_ID || SEEDREAM_MODEL_MAP[model] || "seedream-4-5-251128";
     // 公式SDK仕様: size は "WxH" ピクセル文字列を使う（aspect_ratio パラメータは存在しない）
-    const size = ASPECT_RATIO_SIZES[aspectRatio] ?? "2048x2048";
+    // customSize が "WxH" 形式で渡されていればそちらを優先（入力画像のアスペクト比に合わせるモード）
+    const size = (customSize && /^\d+x\d+$/.test(customSize))
+      ? customSize
+      : (ASPECT_RATIO_SIZES[aspectRatio] ?? "2048x2048");
 
     // 参照画像を base64 data URL の配列に変換（最大10枚）
     // 公式SDK仕様: image: string | list[string]

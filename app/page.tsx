@@ -17,6 +17,7 @@ import BatchTab from "./components/BatchTab";
 import VariationTab from "./components/VariationTab";
 import { fetchPresets } from "@/lib/presets";
 import { type Preset } from "@/lib/supabase";
+import { fileToBytePlusSize } from "@/lib/aspectRatio";
 
 type TabValue = "generate" | "batch" | "variation" | "presets";
 
@@ -34,6 +35,8 @@ export default function Home() {
   const [prompt, setPrompt] = useState("");
   const [referenceFiles, setReferenceFiles] = useState<File[]>([]);
   const [aspectRatio, setAspectRatio] = useState("1:1");
+  const [matchInputAspect, setMatchInputAspect] = useState(false);
+  const [aspectSourceIndex, setAspectSourceIndex] = useState(0);
   const [isGenerating, setIsGenerating] = useState(false);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [showSaveModal, setShowSaveModal] = useState(false);
@@ -174,6 +177,17 @@ export default function Home() {
       formData.append("model", MODEL);
       for (const file of compressedFiles) formData.append("referenceImages", file);
 
+      // 入力画像のアスペクト比に合わせるモード（圧縮前の元画像から取得）
+      if (matchInputAspect && referenceFiles.length > 0) {
+        const idx = Math.min(aspectSourceIndex, referenceFiles.length - 1);
+        try {
+          const customSize = await fileToBytePlusSize(referenceFiles[idx]);
+          formData.append("customSize", customSize);
+        } catch {
+          // 失敗時は通常のaspectRatioにフォールバック
+        }
+      }
+
       const res = await fetch("/api/generate", { method: "POST", body: formData });
 
       // 非JSONレスポンス（413 Request Entity Too Large等）を適切にハンドリング
@@ -197,7 +211,7 @@ export default function Home() {
     } finally {
       setIsGenerating(false);
     }
-  }, [prompt, aspectRatio, referenceFiles, poll, user, compressImage]);
+  }, [prompt, aspectRatio, referenceFiles, poll, user, compressImage, matchInputAspect, aspectSourceIndex]);
 
   return (
     <div className="min-h-screen">
@@ -285,7 +299,41 @@ export default function Home() {
               </div>
 
               <ImageUploader files={referenceFiles} onChange={setReferenceFiles} />
-              <AspectRatioSelector value={aspectRatio} onChange={setAspectRatio} />
+              <div className={matchInputAspect ? "opacity-50 pointer-events-none" : ""}>
+                <AspectRatioSelector value={aspectRatio} onChange={setAspectRatio} />
+              </div>
+
+              {/* 入力画像のアスペクト比に合わせる */}
+              <div className="rounded-xl border border-surface-200 bg-surface-50/60 p-3 space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={matchInputAspect}
+                    onChange={(e) => setMatchInputAspect(e.target.checked)}
+                    disabled={referenceFiles.length === 0}
+                    className="h-4 w-4 rounded border-surface-300 text-accent focus:ring-accent disabled:opacity-50"
+                  />
+                  <span className={`text-sm font-medium ${referenceFiles.length === 0 ? "text-surface-400" : "text-surface-700"}`}>
+                    入力画像のアスペクト比に合わせる
+                  </span>
+                </label>
+                {matchInputAspect && referenceFiles.length > 0 && (
+                  <div className="ml-6">
+                    <label className="block text-xs text-surface-500 mb-1">どの画像から取得</label>
+                    <select
+                      value={Math.min(aspectSourceIndex, referenceFiles.length - 1)}
+                      onChange={(e) => setAspectSourceIndex(Number(e.target.value))}
+                      className="input-base !py-1.5 !text-xs"
+                    >
+                      {referenceFiles.map((f, i) => (
+                        <option key={i} value={i}>
+                          {i + 1}枚目: {f.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
 
               <button
                 type="button"

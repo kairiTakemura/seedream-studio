@@ -4,6 +4,7 @@ import { useState, useCallback, useRef } from "react";
 import { Upload, X, Wand2, Download, FolderOpen, Images } from "lucide-react";
 import { downloadImage } from "./GeneratedImage";
 import AspectRatioSelector from "./AspectRatioSelector";
+import { fileToBytePlusSize } from "@/lib/aspectRatio";
 import { toast } from "sonner";
 
 interface VariationResult {
@@ -54,6 +55,8 @@ export default function VariationTab() {
   const [variationFiles, setVariationFiles] = useState<File[]>([]);
   const [prompt, setPrompt] = useState("");
   const [aspectRatio, setAspectRatio] = useState("1:1");
+  const [matchInputAspect, setMatchInputAspect] = useState(false);
+  const [aspectSource, setAspectSource] = useState<"base" | "variation">("variation");
   const [results, setResults] = useState<VariationResult[]>([]);
   const [isRunning, setIsRunning] = useState(false);
 
@@ -89,6 +92,17 @@ export default function VariationTab() {
       formData.append("referenceImages", compBase);
       formData.append("referenceImages", compVar);
 
+      // 入力画像のアスペクト比に合わせるモード
+      if (matchInputAspect) {
+        const sourceFile = aspectSource === "base" ? base : variation;
+        try {
+          const customSize = await fileToBytePlusSize(sourceFile);
+          formData.append("customSize", customSize);
+        } catch {
+          // 取得失敗時は通常のaspectRatioにフォールバック
+        }
+      }
+
       const res = await fetch("/api/generate", { method: "POST", body: formData });
       const text = await res.text();
       let data: { error?: string; status?: string; imageUrl?: string };
@@ -101,7 +115,7 @@ export default function VariationTab() {
       if (data.status === "COMPLETED" && data.imageUrl) return data.imageUrl;
       throw new Error("画像URLが取得できませんでした");
     },
-    [prompt, aspectRatio]
+    [prompt, aspectRatio, matchInputAspect, aspectSource]
   );
 
   const handleRun = async () => {
@@ -261,7 +275,48 @@ export default function VariationTab() {
             />
           </div>
 
-          <AspectRatioSelector value={aspectRatio} onChange={setAspectRatio} />
+          <div className={matchInputAspect ? "opacity-50 pointer-events-none" : ""}>
+            <AspectRatioSelector value={aspectRatio} onChange={setAspectRatio} />
+          </div>
+
+          {/* 入力画像のアスペクト比に合わせる */}
+          <div className="rounded-xl border border-surface-200 bg-surface-50/60 p-3 space-y-2">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={matchInputAspect}
+                onChange={(e) => setMatchInputAspect(e.target.checked)}
+                className="h-4 w-4 rounded border-surface-300 text-accent focus:ring-accent"
+              />
+              <span className="text-sm font-medium text-surface-700">
+                入力画像のアスペクト比に合わせる
+              </span>
+            </label>
+            {matchInputAspect && (
+              <div className="ml-6 flex gap-4 text-xs text-surface-600">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="variation-aspect-source"
+                    checked={aspectSource === "base"}
+                    onChange={() => setAspectSource("base")}
+                    className="h-3.5 w-3.5 text-accent focus:ring-accent"
+                  />
+                  ベース画像
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="variation-aspect-source"
+                    checked={aspectSource === "variation"}
+                    onChange={() => setAspectSource("variation")}
+                    className="h-3.5 w-3.5 text-accent focus:ring-accent"
+                  />
+                  バリエーション画像（各画像ごとに個別）
+                </label>
+              </div>
+            )}
+          </div>
 
           <button
             onClick={handleRun}
