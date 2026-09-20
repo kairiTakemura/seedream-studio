@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { Upload, X, Wand2, ImageIcon, Download } from "lucide-react";
 import { downloadImage } from "./GeneratedImage";
 import { type Preset } from "@/lib/supabase";
+import { fileToBytePlusSize } from "@/lib/aspectRatio";
 import { toast } from "sonner";
 
 interface BatchResult {
@@ -24,11 +25,35 @@ export default function BatchTab({ presets }: BatchTabProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [results, setResults] = useState<BatchResult[]>([]);
   const [isRunning, setIsRunning] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [matchInputAspect, setMatchInputAspect] = useState(false);
+  const baseInputRef = useRef<HTMLInputElement>(null);
 
   const handleBaseFile = (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      toast.error("画像ファイルを選択してください");
+      return;
+    }
     setBaseFile(file);
     setBasePreview(URL.createObjectURL(file));
   };
+
+  const handleBaseDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  const handleBaseDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  }, []);
+
+  const handleBaseDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleBaseFile(file);
+  }, []);
 
   const togglePreset = (id: string) => {
     setSelectedIds((prev) => {
@@ -38,7 +63,7 @@ export default function BatchTab({ presets }: BatchTabProps) {
     });
   };
 
-  const generateOne = useCallback(async (preset: Preset, base: File): Promise<string> => {
+  const generateOne = useCallback(async (preset: Preset, base: File, matchAspect: boolean): Promise<string> => {
     const formData = new FormData();
     formData.append("prompt", preset.prompt);
     formData.append("aspectRatio", preset.aspect_ratio);
@@ -52,6 +77,16 @@ export default function BatchTab({ presets }: BatchTabProps) {
         const blob = await resp.blob();
         const file = new File([blob], "preset-img.jpg", { type: blob.type });
         formData.append("referenceImages", file);
+      }
+    }
+
+    // ベース画像のアスペクト比に合わせるモード
+    if (matchAspect) {
+      try {
+        const customSize = await fileToBytePlusSize(base);
+        formData.append("customSize", customSize);
+      } catch {
+        // 失敗時はプリセットの aspectRatio にフォールバック
       }
     }
 
@@ -73,7 +108,7 @@ export default function BatchTab({ presets }: BatchTabProps) {
     for (const preset of selected) {
       setResults((prev) => prev.map((r) => r.presetId === preset.id ? { ...r, status: "generating" } : r));
       try {
-        const url = await generateOne(preset, baseFile);
+        const url = await generateOne(preset, baseFile, matchInputAspect);
         setResults((prev) => prev.map((r) => r.presetId === preset.id ? { ...r, status: "done", imageUrl: url } : r));
       } catch (err) {
         setResults((prev) => prev.map((r) =>
@@ -108,12 +143,47 @@ export default function BatchTab({ presets }: BatchTabProps) {
                 </button>
               </div>
             ) : (
-              <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-surface-200 bg-surface-50 py-16 hover:border-surface-300 hover:bg-surface-100 transition-colors">
-                <Upload className="h-6 w-6 text-surface-300" />
+              <div
+                onDragOver={handleBaseDragOver}
+                onDragLeave={handleBaseDragLeave}
+                onDrop={handleBaseDrop}
+                onClick={() => baseInputRef.current?.click()}
+                className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed py-16 transition-all duration-200 ${
+                  isDragging
+                    ? "border-accent bg-accent/5 scale-[1.01]"
+                    : "border-surface-200 bg-surface-50 hover:border-surface-300 hover:bg-surface-100"
+                }`}
+              >
+                <Upload className={`h-6 w-6 ${isDragging ? "text-accent" : "text-surface-300"}`} />
                 <span className="text-sm text-surface-500">クリックまたはドラッグ＆ドロップ</span>
-                <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleBaseFile(e.target.files[0])} />
-              </label>
+                <input
+                  ref={baseInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => e.target.files?.[0] && handleBaseFile(e.target.files[0])}
+                />
+              </div>
             )}
+          </div>
+
+          {/* 入力画像のアスペクト比に合わせる */}
+          <div className="rounded-xl border border-surface-200 bg-surface-50/60 p-3">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={matchInputAspect}
+                onChange={(e) => setMatchInputAspect(e.target.checked)}
+                disabled={!baseFile}
+                className="h-4 w-4 rounded border-surface-300 text-accent focus:ring-accent disabled:opacity-50"
+              />
+              <span className={`text-sm font-medium ${!baseFile ? "text-surface-400" : "text-surface-700"}`}>
+                ベース画像のアスペクト比に合わせる
+              </span>
+            </label>
+            <p className="ml-6 mt-1 text-xs text-surface-400">
+              ONにするとプリセットのアスペクト比を無視してベース画像に揃えます
+            </p>
           </div>
 
           {/* プリセット選択 */}
